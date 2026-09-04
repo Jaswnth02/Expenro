@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowDownRight, Wallet, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowDownRight, ArrowUpRight, Wallet, ChevronDown } from 'lucide-react';
 import { FinancialSummary, Expense, Category } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { CategoryIcon } from '@/components/categories/category-icon';
@@ -150,8 +151,8 @@ export function SummaryCards({
     return { excludedSum: sum, excludedNames: Array.from(namesSet) };
   }, [expenses, excludedCategories]);
 
-  // Adjusted total expenses & remaining balance
-  const displayedTotalExpenses = Math.max(0, summary.totalExpenses - excludedSum);
+  // summary.totalExpenses passed from dashboard page is already adjusted for excluded categories
+  const displayedTotalExpenses = summary.totalExpenses;
   const displayedRemainingBalance = summary.totalIncome - displayedTotalExpenses;
 
   const percentOfTotal =
@@ -160,8 +161,36 @@ export function SummaryCards({
       : 0;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3.5">
-      {/* Card 1: Total Expenses */}
+    <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+      {/* Card 1: Total Income */}
+      <Link
+        href="/income"
+        id="card-total-income"
+        className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm hover:border-emerald-500/40 transition-all duration-150 flex flex-col justify-between group cursor-pointer"
+      >
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+            Total Income
+          </span>
+          <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-xl sm:text-2xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
+            {formatCurrency(summary.totalIncome)}
+          </div>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate flex items-center justify-between">
+            <span>{summary.totalIncome > 0 ? 'Total credited' : 'No income recorded'}</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">
+              Manage &rarr;
+            </span>
+          </p>
+        </div>
+      </Link>
+
+      {/* Card 2: Total Expenses */}
       <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
@@ -188,7 +217,7 @@ export function SummaryCards({
         </div>
       </div>
 
-      {/* Card 2: Remaining Balance */}
+      {/* Card 3: Remaining Balance */}
       <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
@@ -198,7 +227,7 @@ export function SummaryCards({
             className={`w-6 h-6 rounded-lg shrink-0 ${
               displayedRemainingBalance >= 0
                 ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
-                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
             } flex items-center justify-center`}
           >
             <Wallet className="w-3.5 h-3.5" />
@@ -206,17 +235,23 @@ export function SummaryCards({
         </div>
 
         <div>
-          <div className="text-xl sm:text-2xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <div
+            className={`text-xl sm:text-2xl font-extrabold tracking-tight ${
+              displayedRemainingBalance >= 0
+                ? 'text-teal-600 dark:text-teal-400'
+                : 'text-rose-600 dark:text-rose-400'
+            }`}
+          >
             {formatCurrency(displayedRemainingBalance)}
           </div>
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">
-            Budget remainder
+            {displayedRemainingBalance >= 0 ? 'Surplus balance' : 'Overspent / Deficit'}
           </p>
         </div>
       </div>
 
-      {/* Card 3: Selected Category Expenses */}
-      <div className="col-span-2 md:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
+      {/* Card 4: Selected Category Expenses */}
+      <div className="col-span-2 md:col-span-2 lg:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-1 gap-1.5">
           <div className="relative inline-flex items-center min-w-0">
             <select

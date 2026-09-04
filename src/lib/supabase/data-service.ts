@@ -253,6 +253,27 @@ export const SupabaseFinanceService = {
     }
 
     try {
+      const supabase = createClient();
+      let query = supabase
+        .from('income')
+        .select('*')
+        .order('income_date', { ascending: false });
+
+      if (month && year) {
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        query = query.gte('income_date', startDate).lte('income_date', endDate);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        return data.map((i: any) => ({
+          ...i,
+          amount: Number(i.amount),
+        })) as Income[];
+      }
+
       const res = await getIncomesAction(month, year);
       if (res.success && res.data) {
         return res.data;
@@ -269,6 +290,40 @@ export const SupabaseFinanceService = {
     }
 
     try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const isUUID = (str?: string | null) =>
+        str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+
+      const targetUserId = user?.id || (isUUID(income.user_id) ? income.user_id : null);
+
+      if (targetUserId) {
+        const { data, error } = await supabase
+          .from('income')
+          .insert({
+            user_id: targetUserId,
+            source: income.source,
+            amount: Number(income.amount),
+            description: income.description || null,
+            income_date: income.income_date,
+            notes: income.notes || null,
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          const formatted: Income = {
+            ...data,
+            amount: Number(data.amount),
+          };
+          LocalFinanceStore.addIncome(formatted);
+          return formatted;
+        }
+      }
+
       const res = await addIncomeAction(income);
       if (res.success && res.data) {
         LocalFinanceStore.addIncome(res.data);
@@ -535,7 +590,27 @@ export const SupabaseFinanceService = {
       const incomes = await this.getIncomes(month, year);
 
       const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-      const totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
+      let totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
+
+      // If current month has 0 income recorded, carry forward available recent income
+      // (e.g. pocket money from parents/dad transferred in the preceding weeks)
+      if (totalIncome === 0) {
+        const allIncomes = await this.getIncomes();
+        if (allIncomes.length > 0) {
+          const firstDayOfMonth = new Date(year, month - 1, 1);
+          const recentCarriedIncomes = allIncomes.filter((inc) => {
+            const incDate = new Date(inc.income_date);
+            const diffDays = (firstDayOfMonth.getTime() - incDate.getTime()) / (1000 * 3600 * 24);
+            return diffDays >= 0 && diffDays <= 45;
+          });
+
+          if (recentCarriedIncomes.length > 0) {
+            totalIncome = recentCarriedIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+          } else {
+            totalIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+          }
+        }
+      }
 
       // Fetch savings deposits for this month
       const supabase = createClient();

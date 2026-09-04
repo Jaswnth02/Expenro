@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { X, CheckCircle2, AlertCircle, PlusCircle, Plus, Check } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, PlusCircle, ArrowDownRight, ArrowUpRight, Plus, Check } from 'lucide-react';
 import { SupabaseFinanceService } from '@/lib/supabase/data-service';
 import { useAuth } from '@/context/auth-context';
 import { getTodayDateString } from '@/lib/utils';
@@ -16,6 +16,16 @@ interface QuickAddModalProps {
   initialMode?: 'regular' | 'manual';
 }
 
+const COMMON_INCOME_SOURCES = [
+  'Pocket Money',
+  'Salary',
+  'Internship',
+  'Freelancing',
+  'Scholarship',
+  'Gift / Family',
+  'Other',
+];
+
 export function QuickAddModal({
   isOpen,
   onClose,
@@ -24,11 +34,14 @@ export function QuickAddModal({
   const amountInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
 
+  const [entryType, setEntryType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('UPI');
-  const [expenseDate, setExpenseDate] = useState(getTodayDateString());
+  const [entryDate, setEntryDate] = useState(getTodayDateString());
+  const [incomeSource, setIncomeSource] = useState('Pocket Money');
+  const [notes, setNotes] = useState('');
 
   // Quick category creation state
   const [isCreatingCat, setIsCreatingCat] = useState(false);
@@ -53,7 +66,7 @@ export function QuickAddModal({
     if (isOpen) {
       const today = getTodayDateString();
       refreshCategories();
-      setExpenseDate(today);
+      setEntryDate(today);
       setError(null);
       setIsCreatingCat(false);
       setNewCatName('');
@@ -92,37 +105,67 @@ export function QuickAddModal({
       amountInputRef.current?.focus();
       return;
     }
-    if (!categoryId) {
-      setError('Please select an expense category');
-      return;
-    }
 
-    const selectedCat = categories.find((c) => c.id === categoryId);
-    const finalDescription = description.trim() || selectedCat?.name || 'Expense';
+    if (entryType === 'expense') {
+      if (!categoryId) {
+        setError('Please select an expense category');
+        return;
+      }
 
-    try {
-      await SupabaseFinanceService.addExpense({
-        user_id: user?.id || 'user-default-1',
-        category_id: categoryId,
-        amount: numAmount,
-        description: finalDescription,
-        payment_method: paymentMethod,
-        expense_date: expenseDate,
-        notes: null,
-        receipt_url: null,
-      });
+      const selectedCat = categories.find((c) => c.id === categoryId);
+      const finalDescription = description.trim() || selectedCat?.name || 'Expense';
 
-      // Show success feedback
-      setToastMessage('Expense added successfully.');
-      setTimeout(() => {
-        setToastMessage(null);
-        setAmount('');
-        setDescription('');
-        onClose();
-        if (onExpenseAdded) onExpenseAdded();
-      }, 600);
-    } catch {
-      setError('Something went wrong while saving your expense.');
+      try {
+        await SupabaseFinanceService.addExpense({
+          user_id: user?.id || 'user-default-1',
+          category_id: categoryId,
+          amount: numAmount,
+          description: finalDescription,
+          payment_method: paymentMethod,
+          expense_date: entryDate,
+          notes: notes.trim() || null,
+          receipt_url: null,
+        });
+
+        setToastMessage('Expense added successfully.');
+        setTimeout(() => {
+          setToastMessage(null);
+          setAmount('');
+          setDescription('');
+          setNotes('');
+          onClose();
+          if (onExpenseAdded) onExpenseAdded();
+        }, 500);
+      } catch {
+        setError('Something went wrong while saving your expense.');
+      }
+    } else {
+      // Adding Income
+      const finalSource = incomeSource.trim() || 'Pocket Money';
+      const finalDescription = description.trim() || finalSource;
+
+      try {
+        await SupabaseFinanceService.addIncome({
+          user_id: user?.id || 'user-default-1',
+          source: finalSource,
+          amount: numAmount,
+          description: finalDescription,
+          income_date: entryDate,
+          notes: notes.trim() || null,
+        });
+
+        setToastMessage('Income added successfully!');
+        setTimeout(() => {
+          setToastMessage(null);
+          setAmount('');
+          setDescription('');
+          setNotes('');
+          onClose();
+          if (onExpenseAdded) onExpenseAdded();
+        }, 500);
+      } catch {
+        setError('Something went wrong while saving your income.');
+      }
     }
   };
 
@@ -137,16 +180,42 @@ export function QuickAddModal({
         {/* Mobile Drag Indicator */}
         <div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700 mx-auto mt-2.5 sm:hidden shrink-0" />
 
-        {/* Modal Header */}
+        {/* Modal Header & Segmented Switch */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <PlusCircle className="w-3.5 h-3.5" />
-            </div>
-            <h2 id="quick-add-title" className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              Add Expense
-            </h2>
+          {/* Segmented Control */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-xl text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setEntryType('expense');
+                setError(null);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                entryType === 'expense'
+                  ? 'bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-2xs font-bold'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+              }`}
+            >
+              <ArrowDownRight className="w-3.5 h-3.5" />
+              <span>Expense</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEntryType('income');
+                setError(null);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                entryType === 'income'
+                  ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-2xs font-bold'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+              }`}
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>Income</span>
+            </button>
           </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -175,16 +244,18 @@ export function QuickAddModal({
 
           {/* Amount Field */}
           <div className="flex flex-col gap-1">
-            <label htmlFor="expense-amount" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <label htmlFor="quick-add-amount" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
               Amount (₹) *
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-zinc-400">
+              <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold ${
+                entryType === 'income' ? 'text-emerald-500' : 'text-zinc-400'
+              }`}>
                 ₹
               </span>
               <input
                 ref={amountInputRef}
-                id="expense-amount"
+                id="quick-add-amount"
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -192,59 +263,97 @@ export function QuickAddModal({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
-                className="w-full pl-8 pr-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-base font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-zinc-400"
+                className={`w-full pl-8 pr-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border rounded-xl text-base font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none transition-all placeholder:text-zinc-400 ${
+                  entryType === 'income'
+                    ? 'border-emerald-500/40 focus:ring-2 focus:ring-emerald-500'
+                    : 'border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-rose-500'
+                }`}
               />
             </div>
           </div>
 
-          {/* Category */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label htmlFor="expense-category" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                Category *
-              </label>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingCat(!isCreatingCat)}
-                  className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Plus className="w-3 h-3 stroke-[2.5]" />
-                  <span>{isCreatingCat ? 'Close' : 'New'}</span>
-                </button>
-                <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                <Link
-                  href="/categories"
-                  onClick={onClose}
-                  className="text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
-                >
-                  Manage
-                </Link>
+          {/* Conditional Category (Expense) or Source (Income) */}
+          {entryType === 'expense' ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="expense-category" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                  Category *
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingCat(!isCreatingCat)}
+                    className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3 stroke-[2.5]" />
+                    <span>{isCreatingCat ? 'Close' : 'New'}</span>
+                  </button>
+                  <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                  <Link
+                    href="/categories"
+                    onClick={onClose}
+                    className="text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                  >
+                    Manage
+                  </Link>
+                </div>
               </div>
+              <select
+                id="expense-category"
+                value={categoryId}
+                onChange={(e) => {
+                  if (e.target.value === '__add_new__') {
+                    setIsCreatingCat(true);
+                  } else {
+                    setCategoryId(e.target.value);
+                  }
+                }}
+                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+                <option value="__add_new__">+ Add New Category...</option>
+              </select>
             </div>
-            <select
-              id="expense-category"
-              value={categoryId}
-              onChange={(e) => {
-                if (e.target.value === '__add_new__') {
-                  setIsCreatingCat(true);
-                } else {
-                  setCategoryId(e.target.value);
-                }
-              }}
-              className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-            >
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-              <option value="__add_new__">+ Add New Category...</option>
-            </select>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="income-source" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                Income Source *
+              </label>
+              {/* Quick source pills */}
+              <div className="flex flex-wrap gap-1">
+                {COMMON_INCOME_SOURCES.map((src) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setIncomeSource(src)}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                      incomeSource === src
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {src}
+                  </button>
+                ))}
+              </div>
+              <input
+                id="income-source"
+                type="text"
+                placeholder="Or type source (e.g. Dad, Freelance client)"
+                value={incomeSource}
+                onChange={(e) => setIncomeSource(e.target.value)}
+                required
+                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          )}
 
           {/* Quick Inline Category Creator */}
-          {isCreatingCat && (
+          {entryType === 'expense' && isCreatingCat && (
             <div className="p-2.5 bg-zinc-50 dark:bg-zinc-950/60 border border-emerald-500/40 rounded-xl flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-100">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
@@ -304,52 +413,54 @@ export function QuickAddModal({
           )}
 
           {/* Date & Payment Method Side-by-Side Grid */}
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          <div className={`grid ${entryType === 'expense' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5 sm:gap-3`}>
             {/* Date */}
             <div className="flex flex-col gap-1">
-              <label htmlFor="expense-date" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+              <label htmlFor="entry-date" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                 Date *
               </label>
               <input
-                id="expense-date"
+                id="entry-date"
                 type="date"
-                value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
+                value={entryDate}
+                onChange={(e) => setEntryDate(e.target.value)}
                 required
                 className="w-full px-2.5 sm:px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
               />
             </div>
 
-            {/* Payment Method */}
-            <div className="flex flex-col gap-1">
-              <label htmlFor="expense-payment" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                Payment Method
-              </label>
-              <select
-                id="expense-payment"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="w-full px-2.5 sm:px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-              >
-                <option value="UPI">UPI</option>
-                <option value="Debit Card">Debit Card</option>
-                <option value="Credit Card">Credit Card</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+            {/* Payment Method (Expense only) */}
+            {entryType === 'expense' && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="expense-payment" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                  Payment Method
+                </label>
+                <select
+                  id="expense-payment"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                  className="w-full px-2.5 sm:px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="Debit Card">Debit Card</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Description (Optional) */}
           <div className="flex flex-col gap-1">
-            <label htmlFor="expense-desc" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <label htmlFor="entry-desc" className="text-[11px] sm:text-xs font-semibold text-zinc-600 dark:text-zinc-300">
               Description (Optional)
             </label>
             <input
-              id="expense-desc"
+              id="entry-desc"
               type="text"
-              placeholder="e.g. Lunch with team, Metro reload"
+              placeholder={entryType === 'expense' ? 'e.g. Lunch with team, Metro reload' : 'e.g. Monthly allowance, Project payment'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-zinc-400"
@@ -367,9 +478,13 @@ export function QuickAddModal({
             </button>
             <button
               type="submit"
-              className="px-4.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl shadow-xs shadow-emerald-600/20 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              className={`px-4.5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-all focus:outline-none focus:ring-2 cursor-pointer ${
+                entryType === 'income'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 shadow-emerald-600/20 focus:ring-emerald-500'
+                  : 'bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-900 shadow-zinc-900/20 focus:ring-zinc-900'
+              }`}
             >
-              Save Expense
+              {entryType === 'income' ? 'Save Income' : 'Save Expense'}
             </button>
           </div>
         </form>

@@ -807,7 +807,28 @@ export class LocalFinanceStore {
     const savingsTxs = this.getSavingsTransactions(month, year);
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
+    let totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
+
+    // If current month has 0 income recorded, carry forward available recent income
+    // (e.g. pocket money from parents/dad transferred in the preceding weeks)
+    if (totalIncome === 0) {
+      const allIncomes = this.getIncomes();
+      if (allIncomes.length > 0) {
+        const firstDayOfMonth = new Date(year, month - 1, 1);
+        const recentCarried = allIncomes.filter((inc) => {
+          const incDate = new Date(inc.income_date);
+          const diffDays = (firstDayOfMonth.getTime() - incDate.getTime()) / (1000 * 3600 * 24);
+          return diffDays >= 0 && diffDays <= 45;
+        });
+
+        if (recentCarried.length > 0) {
+          totalIncome = recentCarried.reduce((sum, i) => sum + Number(i.amount), 0);
+        } else {
+          totalIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+        }
+      }
+    }
+
     const totalSavings = savingsTxs.reduce((sum, s) => sum + Number(s.amount), 0);
     const remainingBalance = calculateRemainingBalance(totalIncome, totalExpenses);
     const savingsRate = calculateSavingsRate(totalSavings, totalIncome);

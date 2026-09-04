@@ -30,6 +30,13 @@ export function Header({
 
   // Selectable months
   const monthOptions = [
+    { month: 1, year: 2026, label: 'January 2026' },
+    { month: 2, year: 2026, label: 'February 2026' },
+    { month: 3, year: 2026, label: 'March 2026' },
+    { month: 4, year: 2026, label: 'April 2026' },
+    { month: 5, year: 2026, label: 'May 2026' },
+    { month: 6, year: 2026, label: 'June 2026' },
+    { month: 7, year: 2026, label: 'July 2026' },
     { month: 8, year: 2026, label: 'August 2026' },
     { month: 9, year: 2026, label: 'September 2026' },
     { month: 10, year: 2026, label: 'October 2026' },
