@@ -3,13 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/branding/logo';
-import { Mail, Lock, ArrowRight, AlertCircle, ShieldCheck, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, AlertCircle, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { loginSchema } from '@/lib/validations/auth';
 import { useAuth } from '@/context/auth-context';
 import { loginAction } from '@/lib/actions/auth';
-
-const JASWANTH_EMAIL = 'jaswanthmg2006@gmail.com';
-const JASWANTH_PASSWORD = 'Jaswanth@0801';
 
 export default function LoginPage() {
   const { signIn, signInAsDemo } = useAuth();
@@ -17,7 +14,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [oneTapLoading, setOneTapLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Auto-detect and prefill if query parameters were submitted via native browser GET
@@ -29,11 +25,7 @@ export default function LoginPage() {
 
       if (urlEmail || urlPassword) {
         if (urlEmail) {
-          let cleanEmail = urlEmail.trim();
-          if (cleanEmail.toLowerCase() === 'jaswanthm2006@gmail.com') {
-            cleanEmail = JASWANTH_EMAIL;
-          }
-          setEmail(cleanEmail);
+          setEmail(urlEmail.trim());
         }
         if (urlPassword) {
           setPassword(urlPassword);
@@ -48,17 +40,12 @@ export default function LoginPage() {
     setError(null);
     setSuccessMsg(null);
 
-    // Auto-normalize email typo: jaswanthm2006 -> jaswanthmg2006
-    let cleanEmail = targetEmail.trim();
-    if (cleanEmail.toLowerCase() === 'jaswanthm2006@gmail.com') {
-      cleanEmail = JASWANTH_EMAIL;
-    }
+    const cleanEmail = targetEmail.trim();
 
     const validation = loginSchema.safeParse({ email: cleanEmail, password: targetPassword });
     if (!validation.success) {
       setError(validation.error.issues[0].message);
       setLoading(false);
-      setOneTapLoading(false);
       return;
     }
 
@@ -68,7 +55,6 @@ export default function LoginPage() {
       if (!serverResult.success) {
         setError(serverResult.error || 'Invalid email or password. Please try again.');
         setLoading(false);
-        setOneTapLoading(false);
         return;
       }
 
@@ -90,7 +76,6 @@ export default function LoginPage() {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred during sign in.';
       setError(msg);
       setLoading(false);
-      setOneTapLoading(false);
     }
   };
 
@@ -101,13 +86,6 @@ export default function LoginPage() {
     }
     setLoading(true);
     await performLogin(email, password);
-  };
-
-  const handleJaswanthOneTap = async () => {
-    setEmail(JASWANTH_EMAIL);
-    setPassword(JASWANTH_PASSWORD);
-    setOneTapLoading(true);
-    await performLogin(JASWANTH_EMAIL, JASWANTH_PASSWORD);
   };
 
   const handleDemoLogin = () => {
@@ -129,51 +107,7 @@ export default function LoginPage() {
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-zinc-900 py-6 px-5 shadow-sm border border-zinc-200 dark:border-zinc-800 rounded-2xl sm:px-10">
-          
-          {/* Quick One-Tap Login as Owner */}
-          <div className="mb-5 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/20 text-center">
-            <div className="flex items-center justify-between mb-2">
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider uppercase text-emerald-700 dark:text-emerald-400">
-                <Sparkles className="w-3.5 h-3.5" /> Mobile 1-Tap Quick Access
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-semibold">
-                Owner
-              </span>
-            </div>
-            <button
-              type="button"
-              id="one-tap-jaswanth-btn"
-              onClick={handleJaswanthOneTap}
-              disabled={oneTapLoading || loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl shadow text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all cursor-pointer disabled:opacity-60"
-            >
-              {oneTapLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Signing in as Jaswanth...</span>
-                </>
-              ) : (
-                <>
-                  <span>1-Tap Sign In as Jaswanth</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-            <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-              {JASWANTH_EMAIL}
-            </p>
-          </div>
 
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-zinc-900 px-2 text-zinc-400 font-semibold text-[11px]">
-                Or enter credentials
-              </span>
-            </div>
-          </div>
 
           <form
             className="space-y-4"
@@ -217,17 +151,12 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  placeholder="jaswanthmg2006@gmail.com"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-9 pr-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              {email.toLowerCase().includes('jaswanthm2006@') && (
-                <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                  Note: Auto-correcting to registered <b>jaswanthmg2006@gmail.com</b>
-                </p>
-              )}
             </div>
 
             {/* Password Field */}
@@ -268,7 +197,7 @@ export default function LoginPage() {
             <button
               type="submit"
               id="standard-login-submit"
-              disabled={loading || oneTapLoading}
+              disabled={loading}
               onClick={(e) => {
                 e.preventDefault();
                 handleSubmit();
