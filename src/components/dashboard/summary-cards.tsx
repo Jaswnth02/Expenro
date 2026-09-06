@@ -325,8 +325,8 @@ export function SummaryCards({
         </div>
       </div>
 
-      {/* Card 4: Selected Category Expenses (Hidden on mobile, visible on md+) */}
-      <div className="hidden md:flex col-span-1 lg:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex-col justify-between">
+      {/* Card 4: Selected Category Expenses (Spans full width below on mobile, 1 col on desktop/tablet) */}
+      <div className="col-span-2 md:col-span-1 lg:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-1 gap-1.5">
           <div className="relative inline-flex items-center min-w-0">
             <select
