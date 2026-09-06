@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { AlertTriangle, Plus } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { SummaryCards } from '@/components/dashboard/summary-cards';
+import { SetBalanceModal } from '@/components/dashboard/set-balance-modal';
 import { RecentTransactions } from '@/components/dashboard/recent-transactions';
 import { CategoryBreakdownCard } from '@/components/dashboard/category-breakdown-card';
 import { SavingsPreviewCard } from '@/components/dashboard/savings-preview-card';
@@ -15,6 +18,7 @@ import {
   calculateFinancialHealthScore,
   generateFinancialInsights,
 } from '@/lib/calculations/finance';
+import { formatCurrency } from '@/lib/utils';
 import { useExcludedCategories } from '@/lib/exclusions';
 import {
   Expense,
@@ -63,6 +67,7 @@ export default function DashboardPage({
   });
   const [insights, setInsights] = useState<FinancialInsight[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSetBalanceOpen, setIsSetBalanceOpen] = useState(false);
 
   // Month-scoped category exclusions
   const { excludedCategories, filterIncluded, isExcluded } = useExcludedCategories(selectedMonth, selectedYear);
@@ -109,7 +114,12 @@ export default function DashboardPage({
   // Adjusted summary taking exclusions into account everywhere
   const activeSummary = useMemo(() => {
     const adjExpenses = Math.max(0, summary.totalExpenses - excludedSum);
-    const adjRemaining = summary.totalIncome - adjExpenses;
+    const available =
+      summary.availableBalance !== undefined
+        ? summary.availableBalance
+        : Math.max(0, summary.totalIncome - adjExpenses);
+    const threshold = summary.lowBalanceThreshold ?? 1000;
+    const isLow = available <= threshold;
     const adjSavingsRate =
       summary.totalIncome > 0
         ? Math.max(0, Math.round(((summary.totalIncome - adjExpenses) / summary.totalIncome) * 100))
@@ -118,7 +128,9 @@ export default function DashboardPage({
     return {
       ...summary,
       totalExpenses: adjExpenses,
-      remainingBalance: adjRemaining,
+      remainingBalance: available,
+      availableBalance: available,
+      isLowBalance: isLow,
       savingsRate: adjSavingsRate,
     };
   }, [summary, excludedSum]);
@@ -156,14 +168,53 @@ export default function DashboardPage({
         userName="Alex"
       />
 
+      {/* Low Balance Replenishment Banner */}
+      {activeSummary.isLowBalance && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 text-amber-950 dark:text-amber-100 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 border border-amber-300/40">
+              <AlertTriangle className="w-4 h-4 stroke-[2.5]" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                <span>Low Balance Warning</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200">
+                  {formatCurrency(activeSummary.availableBalance ?? 0)} left
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-300/90 mt-0.5 truncate">
+                Balance is below your ₹{(activeSummary.lowBalanceThreshold ?? 1000).toLocaleString('en-IN')} safety buffer. When funds arrive, log them here to replenish.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsSetBalanceOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-white/90 dark:bg-zinc-900/90 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 text-amber-900 dark:text-amber-100 font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
+            >
+              <span>⚙️ Set Real Balance</span>
+            </button>
+            <Link
+              href="/income"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Log Sent Money</span>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Primary Financial Summary Cards (Total Expenses, Remaining Balance, Selected Category) */}
       <SummaryCards
-        summary={summary}
+        summary={activeSummary}
         expenses={expenses}
         categories={categories}
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
+        onOpenSetBalance={() => setIsSetBalanceOpen(true)}
       />
 
       {/* Ready to Fill: Regular Expenses Due Today (After Scheduled Time) */}
@@ -203,6 +254,14 @@ export default function DashboardPage({
 
       {/* Dynamic Smart Financial Insights */}
       <InsightsCard insights={insights} />
+
+      {/* Set Current Wallet Balance Modal */}
+      <SetBalanceModal
+        isOpen={isSetBalanceOpen}
+        onClose={() => setIsSetBalanceOpen(false)}
+        currentBalance={activeSummary.availableBalance ?? activeSummary.remainingBalance}
+        onSuccess={loadDashboardData}
+      />
     </div>
   );
 }

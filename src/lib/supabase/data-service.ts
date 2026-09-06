@@ -31,6 +31,8 @@ import {
   addIncomeAction,
   getIncomesAction,
   deleteIncomeAction,
+  updateIncomeAction,
+  calibrateWalletBalanceAction,
 } from '@/lib/actions/income';
 
 // Helper to check if Supabase is connected and ready
@@ -352,6 +354,23 @@ export const SupabaseFinanceService = {
     }
   },
 
+  async updateIncome(id: string, updates: Partial<Income>): Promise<Income | null> {
+    if (!isSupabaseConfigured()) {
+      return LocalFinanceStore.updateIncome(id, updates);
+    }
+
+    try {
+      const res = await updateIncomeAction(id, updates);
+      if (res.success && res.data) {
+        LocalFinanceStore.updateIncome(id, res.data);
+        return res.data;
+      }
+      return LocalFinanceStore.updateIncome(id, updates);
+    } catch {
+      return LocalFinanceStore.updateIncome(id, updates);
+    }
+  },
+
   // ----------------------------------------------------------------------------
   // SAVINGS GOALS & TRANSACTIONS
   // ----------------------------------------------------------------------------
@@ -586,31 +605,15 @@ export const SupabaseFinanceService = {
     }
 
     try {
-      const expenses = await this.getExpenses(month, year);
-      const incomes = await this.getIncomes(month, year);
+      const [expenses, incomes, allExpenses, allIncomes] = await Promise.all([
+        this.getExpenses(month, year),
+        this.getIncomes(month, year),
+        this.getExpenses(),
+        this.getIncomes(),
+      ]);
 
       const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-      let totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
-
-      // If current month has 0 income recorded, carry forward available recent income
-      // (e.g. pocket money from parents/dad transferred in the preceding weeks)
-      if (totalIncome === 0) {
-        const allIncomes = await this.getIncomes();
-        if (allIncomes.length > 0) {
-          const firstDayOfMonth = new Date(year, month - 1, 1);
-          const recentCarriedIncomes = allIncomes.filter((inc) => {
-            const incDate = new Date(inc.income_date);
-            const diffDays = (firstDayOfMonth.getTime() - incDate.getTime()) / (1000 * 3600 * 24);
-            return diffDays >= 0 && diffDays <= 45;
-          });
-
-          if (recentCarriedIncomes.length > 0) {
-            totalIncome = recentCarriedIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-          } else {
-            totalIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-          }
-        }
-      }
+      const totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
 
       // Fetch savings deposits for this month
       const supabase = createClient();
@@ -618,31 +621,93 @@ export const SupabaseFinanceService = {
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      const { data: savingsTxs } = await supabase
-        .from('savings_transactions')
-        .select('amount')
-        .gte('transaction_date', startDate)
-        .lte('transaction_date', endDate);
+      const [{ data: savingsTxs }, { data: allSavingsTxs }] = await Promise.all([
+        supabase
+          .from('savings_transactions')
+          .select('amount')
+          .gte('transaction_date', startDate)
+          .lte('transaction_date', endDate),
+        supabase.from('savings_transactions').select('amount'),
+      ]);
 
       const totalSavings = (savingsTxs || []).reduce(
-        (sum: number, tx: any) => sum + Number(tx.amount),
+        (sum: number, tx: any) => sum + Number(tx.amount || 0),
         0
       );
 
-      const remainingBalance = calculateRemainingBalance(totalIncome, totalExpenses);
-      const savingsRate = calculateSavingsRate(totalSavings, totalIncome);
+      const allTimeSavings = (allSavingsTxs || []).reduce(
+        (sum: number, tx: any) => sum + Number(tx.amount || 0),
+        0
+      );
+
+      const allTimeIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+      const allTimeExpenses = allExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+      // Cumulative real running available cash balance
+      const availableBalance = Number((allTimeIncome - allTimeExpenses - allTimeSavings).toFixed(2));
+      const lowBalanceThreshold = LocalFinanceStore.getLowBalanceThreshold();
+      const isLowBalance = availableBalance <= lowBalanceThreshold;
+
+      const sortedIncomes = [...allIncomes].sort(
+        (a, b) => new Date(b.income_date).getTime() - new Date(a.income_date).getTime()
+      );
+      const lastIncome = sortedIncomes.length > 0 ? {
+        amount: Number(sortedIncomes[0].amount),
+        source: sortedIncomes[0].source,
+        income_date: sortedIncomes[0].income_date,
+        description: sortedIncomes[0].description,
+      } : null;
+
+      const savingsRate = calculateSavingsRate(
+        totalSavings,
+        totalIncome > 0 ? totalIncome : (allTimeIncome > 0 ? allTimeIncome : 0)
+      );
 
       return {
         totalIncome,
         totalExpenses,
         totalSavings,
-        remainingBalance,
+        remainingBalance: availableBalance, // Real wallet balance
+        availableBalance,
+        allTimeIncome,
+        allTimeExpenses,
+        allTimeSavings,
+        isLowBalance,
+        lowBalanceThreshold,
+        lastIncome,
         savingsRate,
         month,
         year,
       };
     } catch {
       return LocalFinanceStore.getFinancialSummary(month, year);
+    }
+  },
+
+  getLowBalanceThreshold(): number {
+    return LocalFinanceStore.getLowBalanceThreshold();
+  },
+
+  setLowBalanceThreshold(amount: number): number {
+    return LocalFinanceStore.setLowBalanceThreshold(amount);
+  },
+
+  async calibrateWalletBalance(targetBalance: number): Promise<Income> {
+    const localOptimistic = LocalFinanceStore.calibrateWalletBalance(targetBalance);
+
+    if (!isSupabaseConfigured()) {
+      return localOptimistic;
+    }
+
+    try {
+      const res = await calibrateWalletBalanceAction(targetBalance);
+      if (res.success && res.data) {
+        LocalFinanceStore.updateIncome(res.data.id, res.data);
+        return res.data;
+      }
+      return localOptimistic;
+    } catch {
+      return localOptimistic;
     }
   },
 

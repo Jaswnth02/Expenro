@@ -14,6 +14,8 @@ import {
   RotateCcw,
   CheckCircle2,
   Database,
+  AlertTriangle,
+  Wallet,
 } from 'lucide-react';
 import { RegularExpenseList } from '@/components/regular-expenses/regular-expense-list';
 
@@ -24,11 +26,20 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState('Alex Morgan');
   const [email, setEmail] = useState('alex.morgan@expenro.app');
   const [currency, setCurrency] = useState('INR');
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(1000);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    setLowBalanceThreshold(LocalFinanceStore.getLowBalanceThreshold());
   }, []);
+
+  const handleUpdateThreshold = (val: number) => {
+    const updated = LocalFinanceStore.setLowBalanceThreshold(val);
+    setLowBalanceThreshold(updated);
+    setMessage(`Low balance threshold updated to ₹${updated.toLocaleString('en-IN')}`);
+    setTimeout(() => setMessage(null), 3000);
+  };
 
   useEffect(() => {
     if (profile?.full_name) {
@@ -236,7 +247,52 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Row 2: Regular Expenses */}
+      {/* Row 2: Low Balance Warning Buffer */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h2 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              Low Balance Warning Buffer
+            </h2>
+          </div>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+            Since income is replenishment-based when funds run low, set your minimum safety buffer. When your wallet drops below this, you’ll get an alert to request or log your replenishment.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1">
+            {[500, 1000, 2000, 3000].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                onClick={() => handleUpdateThreshold(amt)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  lowBalanceThreshold === amt
+                    ? 'bg-amber-500 text-white shadow-2xs'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80'
+                }`}
+              >
+                ₹{amt.toLocaleString('en-IN')}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex items-center">
+            <span className="absolute left-2 text-xs font-bold text-zinc-400 pointer-events-none">₹</span>
+            <input
+              type="number"
+              min="0"
+              step="100"
+              value={lowBalanceThreshold}
+              onChange={(e) => handleUpdateThreshold(Number(e.target.value) || 0)}
+              className="w-24 pl-5 pr-2 py-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800 rounded-lg text-xs font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Regular Expenses */}
       <div id="regular-expenses">
         <RegularExpenseList />
       </div>

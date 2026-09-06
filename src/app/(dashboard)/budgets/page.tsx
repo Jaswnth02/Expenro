@@ -69,7 +69,7 @@ export default function BudgetsPage() {
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>+ Set Budget</span>
+          <span>Set Budget</span>
         </button>
       </div>
 

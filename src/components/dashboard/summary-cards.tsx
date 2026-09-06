@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, Wallet, ChevronDown } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Wallet, ChevronDown, AlertTriangle } from 'lucide-react';
 import { FinancialSummary, Expense, Category } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { CategoryIcon } from '@/components/categories/category-icon';
@@ -14,6 +14,7 @@ interface SummaryCardsProps {
   categories?: Category[];
   selectedMonth?: number;
   selectedYear?: number;
+  onOpenSetBalance?: () => void;
 }
 
 export function SummaryCards({
@@ -22,6 +23,7 @@ export function SummaryCards({
   categories = [],
   selectedMonth,
   selectedYear,
+  onOpenSetBalance,
 }: SummaryCardsProps) {
   const activeMonth = selectedMonth ?? summary.month ?? 9;
   const activeYear = selectedYear ?? summary.year ?? 2026;
@@ -153,7 +155,18 @@ export function SummaryCards({
 
   // summary.totalExpenses passed from dashboard page is already adjusted for excluded categories
   const displayedTotalExpenses = summary.totalExpenses;
-  const displayedRemainingBalance = summary.totalIncome - displayedTotalExpenses;
+
+  // Real running available wallet balance (not reset monthly)
+  const realAvailableBalance =
+    summary.availableBalance !== undefined
+      ? summary.availableBalance
+      : summary.remainingBalance !== undefined
+      ? summary.remainingBalance
+      : summary.totalIncome - displayedTotalExpenses;
+
+  const lowThreshold = summary.lowBalanceThreshold ?? 1000;
+  const isLowBalance = summary.isLowBalance ?? (realAvailableBalance <= lowThreshold);
+  const isDepleted = realAvailableBalance <= 0;
 
   const percentOfTotal =
     displayedTotalExpenses > 0
@@ -162,15 +175,15 @@ export function SummaryCards({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-      {/* Card 1: Total Income */}
+      {/* Card 1: Income / Top-ups (Hidden on mobile, visible on md+) */}
       <Link
         href="/income"
         id="card-total-income"
-        className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm hover:border-emerald-500/40 transition-all duration-150 flex flex-col justify-between group cursor-pointer"
+        className="hidden md:flex p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm hover:border-emerald-500/40 transition-all duration-150 flex-col justify-between group cursor-pointer"
       >
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-            Total Income
+            Income / Top-ups
           </span>
           <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -182,7 +195,13 @@ export function SummaryCards({
             {formatCurrency(summary.totalIncome)}
           </div>
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate flex items-center justify-between">
-            <span>{summary.totalIncome > 0 ? 'Total credited' : 'No income recorded'}</span>
+            <span>
+              {summary.totalIncome > 0
+                ? 'Credited this month'
+                : summary.lastIncome
+                ? `Last: ${formatCurrency(summary.lastIncome.amount)} (${summary.lastIncome.source})`
+                : 'Sent when low'}
+            </span>
             <span className="text-emerald-600 dark:text-emerald-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">
               Manage &rarr;
             </span>
@@ -217,41 +236,97 @@ export function SummaryCards({
         </div>
       </div>
 
-      {/* Card 3: Remaining Balance */}
-      <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
-            Remaining Balance
-          </span>
+      {/* Card 3: Available Balance (Running Wallet Balance) */}
+      <div
+        id="card-available-balance"
+        className={`p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between ${
+          isLowBalance
+            ? 'border-amber-400/80 dark:border-amber-500/50 ring-1 ring-amber-500/20 bg-amber-50/10'
+            : 'border-zinc-200/80 dark:border-zinc-800'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-1 gap-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
+              Available Balance
+            </span>
+            {isDepleted ? (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shrink-0">
+                Depleted
+              </span>
+            ) : isLowBalance ? (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 animate-pulse shrink-0">
+                Low
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+                Healthy
+              </span>
+            )}
+          </div>
           <div
             className={`w-6 h-6 rounded-lg shrink-0 ${
-              displayedRemainingBalance >= 0
-                ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
-                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+              isDepleted
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                : isLowBalance
+                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+                : 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
             } flex items-center justify-center`}
           >
-            <Wallet className="w-3.5 h-3.5" />
+            {isLowBalance ? (
+              <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />
+            ) : (
+              <Wallet className="w-3.5 h-3.5" />
+            )}
           </div>
         </div>
 
         <div>
           <div
             className={`text-xl sm:text-2xl font-extrabold tracking-tight ${
-              displayedRemainingBalance >= 0
-                ? 'text-teal-600 dark:text-teal-400'
-                : 'text-rose-600 dark:text-rose-400'
+              isDepleted
+                ? 'text-rose-600 dark:text-rose-400'
+                : isLowBalance
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-teal-600 dark:text-teal-400'
             }`}
           >
-            {formatCurrency(displayedRemainingBalance)}
+            {formatCurrency(realAvailableBalance)}
           </div>
-          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">
-            {displayedRemainingBalance >= 0 ? 'Surplus balance' : 'Overspent / Deficit'}
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 flex items-center justify-between gap-1">
+            {isDepleted ? (
+              <span className="text-rose-600 dark:text-rose-400 font-semibold truncate">
+                Deficit • Needs funds
+              </span>
+            ) : isLowBalance ? (
+              <span className="text-amber-600 dark:text-amber-400 font-semibold truncate">
+                Below ₹{lowThreshold.toLocaleString('en-IN')} buffer
+              </span>
+            ) : (
+              <span className="truncate">Running wallet balance</span>
+            )}
+            {onOpenSetBalance ? (
+              <button
+                type="button"
+                onClick={onOpenSetBalance}
+                className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:underline shrink-0 cursor-pointer ml-1"
+              >
+                Set Balance &rarr;
+              </button>
+            ) : isLowBalance ? (
+              <Link
+                href="/income"
+                className="text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:underline shrink-0 ml-1"
+              >
+                + Top-up &rarr;
+              </Link>
+            ) : null}
           </p>
         </div>
       </div>
 
-      {/* Card 4: Selected Category Expenses */}
-      <div className="col-span-2 md:col-span-2 lg:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between">
+      {/* Card 4: Selected Category Expenses (Hidden on mobile, visible on md+) */}
+      <div className="hidden md:flex col-span-1 lg:col-span-1 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex-col justify-between">
         <div className="flex items-center justify-between mb-1 gap-1.5">
           <div className="relative inline-flex items-center min-w-0">
             <select
@@ -293,7 +368,7 @@ export function SummaryCards({
           </div>
           
           <div className="mt-0.5 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate">
+            <span suppressHydrationWarning className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate">
               {transactionCount === 1
                 ? '1 txn'
                 : `${transactionCount} txns`}

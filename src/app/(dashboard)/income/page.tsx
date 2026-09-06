@@ -7,6 +7,7 @@ import { useAuth } from '@/context/auth-context';
 import { Income, Category } from '@/types';
 import { formatCurrency, formatDate, getTodayDateString, getMonthName } from '@/lib/utils';
 import { Plus, Trash2, ArrowUpCircle, ChevronLeft, ChevronRight, Calendar, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { SetBalanceModal } from '@/components/dashboard/set-balance-modal';
 
 export default function IncomePage() {
   const { user } = useAuth();
@@ -66,6 +67,10 @@ export default function IncomePage() {
   ];
 
   const [allTimeIncomes, setAllTimeIncomes] = useState<Income[]>([]);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [isLowBalance, setIsLowBalance] = useState<boolean>(false);
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(1000);
+  const [isSetBalanceOpen, setIsSetBalanceOpen] = useState(false);
 
   const handlePrevMonth = () => {
     if (selectedMonth === 0) {
@@ -98,6 +103,11 @@ export default function IncomePage() {
   const loadIncomes = async () => {
     const all = await SupabaseFinanceService.getIncomes();
     setAllTimeIncomes(all);
+
+    const summary = await SupabaseFinanceService.getFinancialSummary(selectedMonth || 9, selectedYear || 2026);
+    setWalletBalance(summary.availableBalance ?? summary.remainingBalance);
+    setIsLowBalance(summary.isLowBalance ?? false);
+    setLowBalanceThreshold(summary.lowBalanceThreshold ?? 1000);
 
     if (selectedMonth === 0) {
       setIncomes(all);
@@ -241,18 +251,81 @@ export default function IncomePage() {
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer shrink-0 active:scale-95"
             >
               <Plus className="w-3 h-3 stroke-[2.5]" />
-              <span>+ Add Income</span>
+              <span>Add Income</span>
             </button>
           </div>
         </div>
 
-        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          {selectedMonth === 0 ? 'All-Time Records' : `${getMonthName(selectedMonth)} ${selectedYear}`} • Total Credited:{' '}
-          <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
-            {formatCurrency(totalIncome)}
-          </strong>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <div>
+            {selectedMonth === 0 ? 'All-Time Records' : `${getMonthName(selectedMonth)} ${selectedYear}`} • Credited:{' '}
+            <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+              {formatCurrency(totalIncome)}
+            </strong>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span>Available Balance:</span>
+            <strong
+              className={`font-bold ${
+                walletBalance <= 0
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : isLowBalance
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-teal-600 dark:text-teal-400'
+              }`}
+            >
+              {formatCurrency(walletBalance)}
+            </strong>
+            {isLowBalance && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 animate-pulse">
+                Low Balance
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsSetBalanceOpen(true)}
+              className="ml-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors cursor-pointer"
+            >
+              ⚙️ Set Balance
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Low balance alert banner */}
+      {isLowBalance && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-950 dark:text-amber-100 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <span className="font-bold">Available balance is low ({formatCurrency(walletBalance)}).</span>
+              <span className="text-amber-800/90 dark:text-amber-300/90 text-[11px] block mt-0.5">
+                Income is replenishment-based. When money is sent, log it to update your available balance.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsSetBalanceOpen(true)}
+              className="px-2.5 py-1 bg-white/90 dark:bg-zinc-900/90 border border-amber-300 dark:border-amber-700/80 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 text-amber-900 dark:text-amber-100 font-bold text-xs rounded-lg shadow-2xs transition-colors cursor-pointer"
+            >
+              Set Real Balance
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setToastMessage(null);
+                setIsModalOpen(true);
+              }}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors shrink-0 cursor-pointer"
+            >
+              + Log Received Money
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cross-month notification banner if current month is empty but records exist elsewhere */}
       {selectedMonth !== 0 && incomes.length === 0 && allTimeIncomes.length > 0 && (
@@ -493,7 +566,7 @@ export default function IncomePage() {
 
                 {/* Quick Source Chips */}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  {['Dad', 'Pocket Money', 'Salary', 'Freelance', 'Stipend', 'Gift'].map((preset) => (
+                  {['Dad', 'Pocket Money', 'Mom', 'Allowance', 'Family', 'Salary', 'Freelance', 'Stipend'].map((preset) => (
                     <button
                       key={preset}
                       type="button"
@@ -596,6 +669,14 @@ export default function IncomePage() {
           </div>
         </div>
       )}
+
+      {/* Set Current Wallet Balance Modal */}
+      <SetBalanceModal
+        isOpen={isSetBalanceOpen}
+        onClose={() => setIsSetBalanceOpen(false)}
+        currentBalance={walletBalance}
+        onSuccess={loadIncomes}
+      />
     </div>
   );
 }

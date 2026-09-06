@@ -212,8 +212,8 @@ export default function ReportsPage() {
     return prevIncludedExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
   }, [prevIncludedExpenses]);
 
-  const adjCurrRemainingBalance = currSummary.totalIncome - adjCurrTotalExpenses;
-  const adjPrevRemainingBalance = prevSummary.totalIncome - adjPrevTotalExpenses;
+  const adjCurrRemainingBalance = currSummary.availableBalance ?? (currSummary.totalIncome - adjCurrTotalExpenses);
+  const adjPrevRemainingBalance = prevSummary.availableBalance ?? (prevSummary.totalIncome - adjPrevTotalExpenses);
 
   const expDiff =
     adjPrevTotalExpenses > 0
@@ -379,7 +379,13 @@ export default function ReportsPage() {
               </span>
             </div>
             <div className="mt-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-              <span>{adjCurrRemainingBalance >= 0 ? 'Surplus' : 'Deficit'} this month</span>
+              <span>
+                {currSummary.isLowBalance
+                  ? 'Low balance alert'
+                  : adjCurrRemainingBalance >= 0
+                  ? 'Surplus wallet balance'
+                  : 'Deficit balance'}
+              </span>
             </div>
           </div>
         </div>

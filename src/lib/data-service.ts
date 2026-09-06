@@ -54,6 +54,7 @@ export const INITIAL_USER: UserProfile = {
   email: 'alex.morgan@expenro.app',
   currency: 'INR',
   regular_expenses_enabled: true,
+  low_balance_threshold: 1000,
   created_at: '2026-08-01T00:00:00.000Z',
   updated_at: '2026-09-01T00:00:00.000Z',
 };
@@ -391,6 +392,7 @@ export function getInitialSeedData() {
     budgets,
     regularExpenses,
     regular_expenses_enabled: true,
+    low_balance_threshold: 1000,
   };
 }
 
@@ -651,6 +653,19 @@ export class LocalFinanceStore {
     return data.incomes.length < prevLen;
   }
 
+  static updateIncome(id: string, updates: Partial<Income>): Income | null {
+    const data = this.getData();
+    const idx = (data.incomes || []).findIndex((i: Income) => i.id === id);
+    if (idx === -1) return null;
+    data.incomes[idx] = {
+      ...data.incomes[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    this.saveData(data);
+    return data.incomes[idx];
+  }
+
   // Savings Goals & Transactions
   static getSavingsGoals(): SavingsGoal[] {
     const data = this.getData();
@@ -800,48 +815,126 @@ export class LocalFinanceStore {
     }
   }
 
-  // Summary calculation for selected month & year
+  // Summary calculation for selected month & year with cumulative running balance
   static getFinancialSummary(month: number, year: number): FinancialSummary {
     const expenses = this.getExpenses(month, year);
     const incomes = this.getIncomes(month, year);
     const savingsTxs = this.getSavingsTransactions(month, year);
 
+    // Monthly totals for category and report breakdowns
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    let totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
-
-    // If current month has 0 income recorded, carry forward available recent income
-    // (e.g. pocket money from parents/dad transferred in the preceding weeks)
-    if (totalIncome === 0) {
-      const allIncomes = this.getIncomes();
-      if (allIncomes.length > 0) {
-        const firstDayOfMonth = new Date(year, month - 1, 1);
-        const recentCarried = allIncomes.filter((inc) => {
-          const incDate = new Date(inc.income_date);
-          const diffDays = (firstDayOfMonth.getTime() - incDate.getTime()) / (1000 * 3600 * 24);
-          return diffDays >= 0 && diffDays <= 45;
-        });
-
-        if (recentCarried.length > 0) {
-          totalIncome = recentCarried.reduce((sum, i) => sum + Number(i.amount), 0);
-        } else {
-          totalIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-        }
-      }
-    }
-
+    const totalIncome = incomes.reduce((sum, i) => sum + Number(i.amount), 0);
     const totalSavings = savingsTxs.reduce((sum, s) => sum + Number(s.amount), 0);
-    const remainingBalance = calculateRemainingBalance(totalIncome, totalExpenses);
-    const savingsRate = calculateSavingsRate(totalSavings, totalIncome);
+
+    // Cumulative / All-time financial state (money is sent when balance is low, not monthly)
+    const allIncomes = this.getIncomes();
+    const allExpenses = this.getExpenses();
+    const allSavingsTxs = this.getSavingsTransactions();
+
+    const allTimeIncome = allIncomes.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+    const allTimeExpenses = allExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const allTimeSavings = allSavingsTxs.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+    // Real Available Balance (running wallet balance across all time)
+    const availableBalance = Number((allTimeIncome - allTimeExpenses - allTimeSavings).toFixed(2));
+    const lowBalanceThreshold = this.getLowBalanceThreshold();
+    const isLowBalance = availableBalance <= lowBalanceThreshold;
+
+    // Latest replenishment/income transaction
+    const sortedIncomes = [...allIncomes].sort(
+      (a, b) => new Date(b.income_date).getTime() - new Date(a.income_date).getTime()
+    );
+    const lastIncome = sortedIncomes.length > 0 ? {
+      amount: Number(sortedIncomes[0].amount),
+      source: sortedIncomes[0].source,
+      income_date: sortedIncomes[0].income_date,
+      description: sortedIncomes[0].description,
+    } : null;
+
+    const savingsRate = calculateSavingsRate(
+      totalSavings,
+      totalIncome > 0 ? totalIncome : (allTimeIncome > 0 ? allTimeIncome : 0)
+    );
 
     return {
       totalIncome,
       totalExpenses,
       totalSavings,
-      remainingBalance,
+      remainingBalance: availableBalance, // Available wallet cash balance
+      availableBalance,
+      allTimeIncome,
+      allTimeExpenses,
+      allTimeSavings,
+      isLowBalance,
+      lowBalanceThreshold,
+      lastIncome,
       savingsRate,
       month,
       year,
     };
+  }
+
+  // Low balance threshold setting (default: 1000)
+  static getLowBalanceThreshold(): number {
+    const data = this.getData();
+    if (typeof data.low_balance_threshold === 'number' && data.low_balance_threshold >= 0) {
+      return data.low_balance_threshold;
+    }
+    return 1000;
+  }
+
+  static setLowBalanceThreshold(amount: number): number {
+    const data = this.getData();
+    data.low_balance_threshold = Math.max(0, amount);
+    this.saveData(data);
+    return data.low_balance_threshold;
+  }
+
+  // Set real-world available balance by calibrating the opening balance
+  static calibrateWalletBalance(targetBalance: number): Income {
+    const data = this.getData();
+    const allExpenses = this.getExpenses();
+    const allSavings = this.getSavingsTransactions();
+    const allIncomes = this.getIncomes();
+
+    const totalExp = allExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const totalSav = allSavings.reduce((s, st) => s + Number(st.amount || 0), 0);
+
+    const existingOpeningIdx = allIncomes.findIndex(
+      (i) => i.source.toLowerCase() === 'opening balance' || i.description?.toLowerCase() === 'opening balance'
+    );
+
+    const otherIncomes = allIncomes
+      .filter((_, idx) => idx !== existingOpeningIdx)
+      .reduce((s, i) => s + Number(i.amount || 0), 0);
+
+    const requiredOpening = Math.max(0.01, Number((targetBalance + totalExp + totalSav - otherIncomes).toFixed(2)));
+
+    if (existingOpeningIdx !== -1) {
+      data.incomes[existingOpeningIdx].amount = requiredOpening;
+      data.incomes[existingOpeningIdx].notes = `Calibrated to set current available balance to ₹${targetBalance.toLocaleString('en-IN')}`;
+      data.incomes[existingOpeningIdx].updated_at = new Date().toISOString();
+      this.saveData(data);
+      return data.incomes[existingOpeningIdx];
+    } else {
+      const earliestExp = [...allExpenses].sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime())[0];
+      const startDate = earliestExp ? earliestExp.expense_date : '2026-06-01';
+
+      const newIncome: Income = {
+        id: 'inc-open-' + Date.now(),
+        user_id: 'user-default-1',
+        source: 'Opening Balance',
+        amount: requiredOpening,
+        description: 'Starting wallet balance calibration',
+        income_date: startDate,
+        notes: `Calibrated to set current available balance to ₹${targetBalance.toLocaleString('en-IN')}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      data.incomes.push(newIncome);
+      this.saveData(data);
+      return newIncome;
+    }
   }
 
   // ----------------------------------------------------------------------------

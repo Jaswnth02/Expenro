@@ -139,20 +139,37 @@ export function calculateFinancialHealthScore(
     }
   }
 
-  // Factor 3: Cashflow Balance
-  if (summary.totalIncome > 0 && summary.totalExpenses < summary.totalIncome) {
-    score += 10;
+  // Factor 3: Liquidity & Running Balance (Ad-hoc replenishment model)
+  const currentBalance = summary.availableBalance ?? summary.remainingBalance;
+  const threshold = summary.lowBalanceThreshold ?? 1000;
+
+  if (currentBalance > threshold * 2) {
+    score += 15;
     factors.push({
-      name: 'Positive Cash Flow',
-      score: 10,
-      description: 'Living comfortably within your means with positive cashflow.',
+      name: 'Healthy Cash Reserve',
+      score: 15,
+      description: 'Available wallet balance is well above the low-balance safety buffer.',
     });
-  } else if (summary.totalIncome > 0 && summary.totalExpenses > summary.totalIncome) {
-    score -= 20;
+  } else if (currentBalance >= threshold) {
+    score += 5;
     factors.push({
-      name: 'Negative Cash Flow',
-      score: -20,
-      description: 'Your expenses exceed your earnings this month.',
+      name: 'Stable Liquidity',
+      score: 5,
+      description: 'Available balance is above the replenishment threshold.',
+    });
+  } else if (currentBalance > 0) {
+    score -= 10;
+    factors.push({
+      name: 'Low Balance',
+      score: -10,
+      description: 'Available balance is running low. Ready for funds replenishment.',
+    });
+  } else {
+    score -= 25;
+    factors.push({
+      name: 'Deficit Balance',
+      score: -25,
+      description: 'Wallet balance is depleted. Immediate replenishment needed.',
     });
   }
 
@@ -194,6 +211,18 @@ export function generateFinancialInsights(
   summary: FinancialSummary
 ): FinancialInsight[] {
   const insights: FinancialInsight[] = [];
+
+  // 0. Low Balance Alert (Top Priority)
+  const availableBal = summary.availableBalance ?? summary.remainingBalance;
+  const lowThresh = summary.lowBalanceThreshold ?? 1000;
+  if (summary.isLowBalance || availableBal <= lowThresh) {
+    insights.push({
+      id: 'low-balance-alert',
+      type: 'warning',
+      title: 'Low Balance Alert',
+      message: `Available balance is ₹${availableBal.toLocaleString('en-IN')}, below your ₹${lowThresh.toLocaleString('en-IN')} safety buffer. Ready for funds replenishment.`,
+    });
+  }
 
   // 1. Highest Spending Category
   if (expenses.length > 0) {

@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string;
   currency: CurrencyCode;
   regular_expenses_enabled?: boolean;
+  low_balance_threshold?: number;
   created_at: string;
   updated_at: string;
 }
@@ -170,6 +171,19 @@ export interface FinancialSummary {
   savingsRate: number;
   month: number;
   year: number;
+  // Cumulative / All-Time Wallet Balance & Low Balance Status
+  availableBalance?: number;
+  allTimeIncome?: number;
+  allTimeExpenses?: number;
+  allTimeSavings?: number;
+  isLowBalance?: boolean;
+  lowBalanceThreshold?: number;
+  lastIncome?: {
+    amount: number;
+    source: string;
+    income_date: string;
+    description?: string | null;
+  } | null;
   previousMonthComparison?: {
     incomeChangePct: number;
     expenseChangePct: number;
