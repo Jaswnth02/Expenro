@@ -10,7 +10,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { MonthlyMealSummary } from '@/types';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { formatCurrency, getTodayDateString, getMonthName } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +29,7 @@ export function MealDuesWidget({ refreshKey = 0 }: MealDuesWidgetProps) {
 
   useEffect(() => {
     let isMounted = true;
-    SupabaseFinanceService.getMonthlyMealSummary(currentMonth, currentYear).then((res) => {
+    FinanceService.getMonthlyMealSummary(currentMonth, currentYear).then((res) => {
       if (isMounted) {
         setSummary(res);
         setLoading(false);

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RegularExpense, Category } from '@/types';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { LocalFinanceStore } from '@/lib/data-service';
 import { useAuth } from '@/context/auth-context';
 import { RegularExpenseItem } from './regular-expense-item';
@@ -49,9 +49,9 @@ export function RegularExpenseList() {
     setIsLoading(true);
     try {
       const [list, enabled, cats] = await Promise.all([
-        SupabaseFinanceService.getRegularExpenses(),
-        SupabaseFinanceService.getRegularExpensesSettings(),
-        SupabaseFinanceService.getCategories(),
+        FinanceService.getRegularExpenses(),
+        FinanceService.getRegularExpensesSettings(),
+        FinanceService.getCategories(),
       ]);
       setRegularExpenses(list);
       setIsEnabled(enabled);
@@ -77,13 +77,13 @@ export function RegularExpenseList() {
 
   const handleToggleGlobal = async (nextState: boolean) => {
     setIsEnabled(nextState);
-    await SupabaseFinanceService.setRegularExpensesSettings(nextState);
+    await FinanceService.setRegularExpensesSettings(nextState);
     showToast(`Regular Expenses ${nextState ? 'enabled' : 'disabled'}.`);
   };
 
   const handleToggleItem = async (id: string, active: boolean) => {
     try {
-      await SupabaseFinanceService.toggleRegularExpense(id, active);
+      await FinanceService.toggleRegularExpense(id, active);
       setRegularExpenses((prev) =>
         prev.map((item) => (item.id === id ? { ...item, active } : item))
       );
@@ -94,7 +94,7 @@ export function RegularExpenseList() {
 
   const handleDeleteItem = async (id: string) => {
     try {
-      await SupabaseFinanceService.deleteRegularExpense(id);
+      await FinanceService.deleteRegularExpense(id);
       setRegularExpenses((prev) => prev.filter((item) => item.id !== id));
       showToast('Regular expense deleted. Historical transactions preserved.');
     } catch {
@@ -104,13 +104,13 @@ export function RegularExpenseList() {
 
   const handleSaveForm = async (payload: any) => {
     if (editingExpense) {
-      const updated = await SupabaseFinanceService.updateRegularExpense(editingExpense.id, payload);
+      const updated = await FinanceService.updateRegularExpense(editingExpense.id, payload);
       setRegularExpenses((prev) =>
         prev.map((item) => (item.id === updated.id ? updated : item))
       );
       showToast('Regular expense updated.');
     } else {
-      const created = await SupabaseFinanceService.addRegularExpense(payload);
+      const created = await FinanceService.addRegularExpense(payload);
       setRegularExpenses((prev) => [...prev, created]);
       showToast('Regular expense shortcut added.');
     }

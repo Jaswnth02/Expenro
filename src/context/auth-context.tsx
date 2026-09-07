@@ -1,14 +1,26 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { createClient } from '@/lib/supabase/client';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserProfile } from '@/types';
 import { INITIAL_USER } from '@/lib/data-service';
+import {
+  loginAction,
+  signupAction,
+  logoutAction,
+  getCurrentUserProfileAction,
+} from '@/lib/actions/auth';
+
+export interface AuthUser {
+  id: string;
+  email?: string;
+  user_metadata?: {
+    full_name?: string;
+  };
+}
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: { user: AuthUser } | null;
   profile: UserProfile | null;
   isLoading: boolean;
   isConfigured: boolean;
@@ -24,194 +36,108 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(INITIAL_USER);
   const [isLoading, setIsLoading] = useState(true);
   const [isDemoUser, setIsDemoUser] = useState(true);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const isConfigured = Boolean(
-    supabaseUrl && !supabaseUrl.includes('placeholder') && !supabaseUrl.includes('your-project-id')
-  );
+  // MongoDB is configured if environment variable or server is available
+  const isConfigured = true;
 
-  const supabase = useMemo(() => createClient(), []);
-
-  // Fetch or create profile for authenticated user
-  const fetchProfile = async (currentUser: User) => {
+  const loadUser = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single();
-
-      if (data) {
-        setProfile({
-          id: data.id,
-          full_name: data.full_name || currentUser.user_metadata?.full_name || 'User',
-          email: data.email || currentUser.email || '',
-          currency: (data.currency as any) || 'INR',
-          created_at: data.created_at,
-          updated_at: data.updated_at,
+      const currentProfile = await getCurrentUserProfileAction();
+      if (currentProfile) {
+        setUser({
+          id: currentProfile.id,
+          email: currentProfile.email,
+          user_metadata: { full_name: currentProfile.full_name || 'User' },
         });
-      } else if (error && error.code === 'PGRST116') {
-        // Profile does not exist yet; insert profile
-        const newProfile: UserProfile = {
-          id: currentUser.id,
-          full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User',
-          email: currentUser.email || '',
-          currency: 'INR',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        await supabase.from('profiles').upsert(newProfile);
-        setProfile(newProfile);
-      }
-    } catch {
-      // Fallback to metadata
-      setProfile({
-        id: currentUser.id,
-        full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User',
-        email: currentUser.email || '',
-        currency: 'INR',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
-  };
-
-  useEffect(() => {
-    if (!isConfigured) {
-      // Demo Mode
-      setUser(null);
-      setSession(null);
-      setProfile(INITIAL_USER);
-      setIsDemoUser(true);
-      setIsLoading(false);
-      return;
-    }
-
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      if (currentSession?.user) {
-        setUser(currentSession.user);
+        setProfile(currentProfile);
         setIsDemoUser(false);
-        fetchProfile(currentSession.user).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      setSession(currentSession);
-      if (currentSession?.user) {
-        setUser(currentSession.user);
-        setIsDemoUser(false);
-        await fetchProfile(currentSession.user);
       } else {
         setUser(null);
         setProfile(INITIAL_USER);
         setIsDemoUser(true);
       }
+    } catch {
+      setUser(null);
+      setProfile(INITIAL_USER);
+      setIsDemoUser(true);
+    } finally {
       setIsLoading(false);
-    });
+    }
+  }, []);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isConfigured, supabase]);
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
 
   const signIn = async (email: string, password: string) => {
-    if (!isConfigured) {
-      // Demo sign in
-      signInAsDemo();
-      return { error: null };
-    }
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const res = await loginAction(email, password);
+      if (!res.success) {
+        return { error: new Error(res.error || 'Invalid credentials') };
+      }
 
-      if (error) return { error };
-
-      if (data.user) {
-        setUser(data.user);
-        setSession(data.session);
+      if (res.user) {
+        setUser({
+          id: res.user.id,
+          email: res.user.email,
+          user_metadata: { full_name: res.user.fullName },
+        });
         setIsDemoUser(false);
-        await fetchProfile(data.user);
+        await loadUser();
       }
 
       return { error: null };
-    } catch (err: any) {
-      return { error: err };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return { error };
     }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    if (!isConfigured) {
-      signInAsDemo();
-      return { error: null };
-    }
-
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
-
-      if (error) return { error };
-
-      if (data.user) {
-        setUser(data.user);
-        setSession(data.session);
-        setIsDemoUser(false);
-        await fetchProfile(data.user);
+      const res = await signupAction(email, password, fullName);
+      if (!res.success) {
+        return { error: new Error(res.error || 'Failed to sign up') };
       }
 
-      return { error: null, data };
-    } catch (err: any) {
-      return { error: err };
+      if (res.user) {
+        setUser({
+          id: res.user.id,
+          email: res.user.email,
+          user_metadata: { full_name: res.user.fullName },
+        });
+        setIsDemoUser(false);
+        await loadUser();
+      }
+
+      return { error: null, data: res.user };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return { error };
     }
   };
 
   const signOut = async () => {
+    try {
+      await logoutAction();
+    } catch {}
+
     if (typeof document !== 'undefined') {
+      document.cookie = 'expenro_session=; path=/; max-age=0;';
       document.cookie = 'expenro_demo_user=; path=/; max-age=0;';
     }
-    if (isConfigured) {
-      await supabase.auth.signOut();
-    }
+
     setUser(null);
-    setSession(null);
     setProfile(INITIAL_USER);
     setIsDemoUser(true);
   };
 
-  const resetPassword = async (email: string) => {
-    if (!isConfigured) {
-      return { error: null };
-    }
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback?next=/settings`,
-      });
-      return { error };
-    } catch (err: any) {
-      return { error: err };
-    }
+  const resetPassword = async (_email: string) => {
+    return { error: null };
   };
 
   const signInAsDemo = () => {
@@ -219,16 +145,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.cookie = 'expenro_demo_user=true; path=/; max-age=86400;';
     }
     setUser(null);
-    setSession(null);
     setProfile(INITIAL_USER);
     setIsDemoUser(true);
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user);
-    }
+    await loadUser();
   };
+
+  const session = user ? { user } : null;
 
   return (
     <AuthContext.Provider

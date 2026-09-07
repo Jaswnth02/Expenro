@@ -11,7 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { RegularExpense, PaymentMethod, Expense } from '@/types';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { formatCurrency, getTodayDateString } from '@/lib/utils';
 import { formatTime12Hour, getCurrentTimeString } from '@/lib/calculations/regular-expenses';
 import { CATEGORY_ICON_MAP } from '@/components/categories/category-icon';
@@ -59,7 +59,7 @@ export function DueRegularExpensesCard({
   const loadDueExpenses = useCallback(async () => {
     try {
       setLoading(true);
-      const enabled = await SupabaseFinanceService.getRegularExpensesSettings();
+      const enabled = await FinanceService.getRegularExpensesSettings();
       setIsEnabled(enabled);
       if (!enabled) {
         setDueExpenses([]);
@@ -67,14 +67,14 @@ export function DueRegularExpensesCard({
       }
 
       // 1. Get eligible regular expenses whose time has arrived for today
-      const eligible = await SupabaseFinanceService.getEligibleRegularExpenses(today, {
+      const eligible = await FinanceService.getEligibleRegularExpenses(today, {
         checkTime: true,
         currentTime: getCurrentTimeString(),
       });
 
       // 2. Fetch today's already logged expenses to filter out ones already added
       const [yearStr, monthStr] = today.split('-');
-      const allExpenses: Expense[] = await SupabaseFinanceService.getExpenses(
+      const allExpenses: Expense[] = await FinanceService.getExpenses(
         Number(monthStr),
         Number(yearStr)
       );
@@ -182,7 +182,7 @@ export function DueRegularExpensesCard({
           description: e.name,
         }));
 
-      await SupabaseFinanceService.addSelectedRegularExpenses(
+      await FinanceService.addSelectedRegularExpenses(
         itemsToAdd,
         paymentMethod,
         today

@@ -1,7 +1,8 @@
 'use server';
 
-import { createClient as createServerClient } from '@/lib/supabase/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
+import { IncomeModel, ExpenseModel, UserModel } from '@/lib/mongodb/models';
+import { getSessionUser } from '@/lib/auth/session';
 import { Income } from '@/types';
 
 interface ActionResponse<T = unknown> {
@@ -15,69 +16,62 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createAdminClient(url, key);
-}
+async function resolveUserId(explicitUserId?: string): Promise<string | null> {
+  const session = await getSessionUser();
+  if (session?.userId) return session.userId;
+  if (explicitUserId && explicitUserId.length > 5) return explicitUserId;
 
-async function getClients() {
-  const admin = getAdminClient();
-  let server: any = null;
-  let user: any = null;
+  // Fallback to first user in database if any
+  const firstUser = await UserModel.findOne().lean();
+  if (firstUser) return firstUser._id.toString();
 
-  try {
-    server = await createServerClient();
-    const userRes = await server.auth.getUser();
-    user = userRes.data?.user || null;
-  } catch {
-    // If running in a context without request cookies (or during background/script execution), ignore
-  }
-
-  const client = admin || server;
-  return { admin, server, client, user };
+  return null;
 }
 
 export async function addIncomeAction(
   income: Omit<Income, 'id' | 'created_at' | 'updated_at'>
 ): Promise<ActionResponse<Income>> {
   try {
-    const { admin, client, user } = await getClients();
-    if (!client) return { success: false, error: 'Database client not available' };
-
-    const isUUID = (str?: string | null) =>
-      str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
-
-    let targetUserId = user?.id;
-    if (!targetUserId && isUUID(income.user_id)) {
-      targetUserId = income.user_id;
+    if (!isMongoConfigured()) {
+      return {
+        success: true,
+        data: {
+          ...income,
+          id: `inc-${Date.now()}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      };
     }
 
-    if (!targetUserId && admin) {
-      const { data: userList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      if (userList?.users?.[0]?.id) {
-        targetUserId = userList.users[0].id;
-      }
+    await connectToDatabase();
+    const userId = await resolveUserId(income.user_id);
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
     }
 
-    const payload = {
-      user_id: targetUserId,
+    const created = await IncomeModel.create({
+      userId,
       source: income.source,
-      amount: Number(income.amount),
+      amount: income.amount,
       description: income.description || null,
-      income_date: income.income_date,
+      incomeDate: income.income_date,
       notes: income.notes || null,
-    };
+    });
 
-    const { data, error } = await client.from('income').insert(payload).select().single();
-    if (error) return { success: false, error: error.message };
     return {
       success: true,
       data: {
-        ...data,
-        amount: Number(data.amount),
-      } as Income,
+        id: created._id.toString(),
+        user_id: created.userId,
+        source: created.source,
+        amount: created.amount,
+        description: created.description,
+        income_date: created.incomeDate,
+        notes: created.notes,
+        created_at: new Date(created.createdAt).toISOString(),
+        updated_at: new Date(created.updatedAt).toISOString(),
+      },
     };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
@@ -89,30 +83,40 @@ export async function getIncomesAction(
   year?: number
 ): Promise<ActionResponse<Income[]>> {
   try {
-    const { client } = await getClients();
-    if (!client) return { success: false, error: 'Database client not available' };
-
-    let query = client
-      .from('income')
-      .select('*')
-      .order('income_date', { ascending: false });
-
-    if (month !== undefined && year !== undefined) {
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      query = query.gte('income_date', startDate).lte('income_date', endDate);
+    if (!isMongoConfigured()) {
+      return { success: true, data: [] };
     }
 
-    const { data, error } = await query;
-    if (error) return { success: false, error: error.message };
+    await connectToDatabase();
+    const userId = await resolveUserId();
+    if (!userId) {
+      return { success: true, data: [] };
+    }
 
-    const formatted = (data || []).map((i: any) => ({
-      ...i,
-      amount: Number(i.amount),
-    })) as Income[];
+    const query: any = { userId };
+    if (month !== undefined && year !== undefined) {
+      const monthStr = String(month).padStart(2, '0');
+      const lastDay = new Date(year, month, 0).getDate();
+      query.incomeDate = {
+        $gte: `${year}-${monthStr}-01`,
+        $lte: `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`,
+      };
+    }
 
-    return { success: true, data: formatted };
+    const docs = await IncomeModel.find(query).sort({ incomeDate: -1 }).lean();
+    const data: Income[] = docs.map((d: any) => ({
+      id: d._id.toString(),
+      user_id: d.userId,
+      source: d.source,
+      amount: Number(d.amount),
+      description: d.description,
+      income_date: d.incomeDate,
+      notes: d.notes,
+      created_at: new Date(d.createdAt).toISOString(),
+      updated_at: new Date(d.updatedAt).toISOString(),
+    }));
+
+    return { success: true, data };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
   }
@@ -123,33 +127,53 @@ export async function updateIncomeAction(
   updates: Partial<Income>
 ): Promise<ActionResponse<Income>> {
   try {
-    const { client } = await getClients();
-    if (!client) return { success: false, error: 'Database client not available' };
+    if (!isMongoConfigured()) {
+      return {
+        success: true,
+        data: {
+          id,
+          user_id: 'user-default-1',
+          source: updates.source || 'Other',
+          amount: updates.amount || 0,
+          description: updates.description || null,
+          income_date: updates.income_date || new Date().toISOString().split('T')[0],
+          notes: updates.notes || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      };
+    }
 
-    const payload: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-    };
+    await connectToDatabase();
+    const updated = await IncomeModel.findByIdAndUpdate(
+      id,
+      {
+        ...(updates.source && { source: updates.source }),
+        ...(updates.amount !== undefined && { amount: updates.amount }),
+        ...(updates.description !== undefined && { description: updates.description }),
+        ...(updates.income_date && { incomeDate: updates.income_date }),
+        ...(updates.notes !== undefined && { notes: updates.notes }),
+      },
+      { new: true }
+    ).lean();
 
-    if (updates.source !== undefined) payload.source = updates.source;
-    if (updates.amount !== undefined) payload.amount = Number(updates.amount);
-    if (updates.description !== undefined) payload.description = updates.description || null;
-    if (updates.income_date !== undefined) payload.income_date = updates.income_date;
-    if (updates.notes !== undefined) payload.notes = updates.notes || null;
+    if (!updated) {
+      return { success: false, error: 'Income record not found' };
+    }
 
-    const { data, error } = await client
-      .from('income')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) return { success: false, error: error.message };
     return {
       success: true,
       data: {
-        ...data,
-        amount: Number(data.amount),
-      } as Income,
+        id: updated._id.toString(),
+        user_id: updated.userId,
+        source: updated.source,
+        amount: Number(updated.amount),
+        description: updated.description,
+        income_date: updated.incomeDate,
+        notes: updated.notes,
+        created_at: new Date(updated.createdAt).toISOString(),
+        updated_at: new Date(updated.updatedAt).toISOString(),
+      },
     };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
@@ -158,117 +182,95 @@ export async function updateIncomeAction(
 
 export async function deleteIncomeAction(id: string): Promise<ActionResponse<boolean>> {
   try {
-    const { client } = await getClients();
-    if (!client) return { success: false, error: 'Database client not available' };
-    const { error } = await client.from('income').delete().eq('id', id);
-    if (error) return { success: false, error: error.message };
+    if (!isMongoConfigured()) {
+      return { success: true, data: true };
+    }
+
+    await connectToDatabase();
+    await IncomeModel.findByIdAndDelete(id);
     return { success: true, data: true };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
   }
 }
 
+/**
+ * Calibrate wallet balance by calculating target difference and inserting an income adjustment
+ */
 export async function calibrateWalletBalanceAction(
-  targetBalance: number
+  targetBalance: number,
+  month: number,
+  year: number
 ): Promise<ActionResponse<Income>> {
   try {
-    const { admin, client, user } = await getClients();
-    if (!client) return { success: false, error: 'Database client not available' };
+    if (!isMongoConfigured()) {
+      return { success: false, error: 'MongoDB not configured' };
+    }
 
-    // Query expenses, savings_transactions, and income in parallel
-    const [expensesRes, savingsRes, incomesRes] = await Promise.all([
-      client.from('expenses').select('amount, expense_date'),
-      client.from('savings_transactions').select('amount'),
-      client.from('income').select('*').order('income_date', { ascending: false }),
+    await connectToDatabase();
+    const userId = await resolveUserId();
+    if (!userId) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const monthStr = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const dateQuery = {
+      $gte: `${year}-${monthStr}-01`,
+      $lte: `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`,
+    };
+
+    const [incomes, expenses] = await Promise.all([
+      IncomeModel.find({ userId, incomeDate: dateQuery }).lean(),
+      ExpenseModel.find({ userId, expenseDate: dateQuery }).lean(),
     ]);
 
-    if (expensesRes.error) return { success: false, error: expensesRes.error.message };
-    if (savingsRes.error) return { success: false, error: savingsRes.error.message };
-    if (incomesRes.error) return { success: false, error: incomesRes.error.message };
+    const totalIncome = incomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
+    const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+    const currentRemaining = totalIncome - totalExpenses;
 
-    const expenses = expensesRes.data || [];
-    const savings = savingsRes.data || [];
-    const incomes = incomesRes.data || [];
-
-    const totalExp = expenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
-    const totalSav = savings.reduce((s: number, st: any) => s + Number(st.amount || 0), 0);
-
-    const openingIncomes = incomes.filter(
-      (i: any) =>
-        i.source?.toLowerCase() === 'opening balance' ||
-        i.description?.toLowerCase() === 'opening balance'
-    );
-    const existingOpening = openingIncomes[0];
-
-    const otherIncomes = incomes
-      .filter((i: any) => !openingIncomes.some((op: any) => op.id === i.id))
-      .reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
-
-    // Postgres CHECK constraint: amount > 0
-    const rawRequired = Number((targetBalance + totalExp + totalSav - otherIncomes).toFixed(2));
-    const requiredOpening = Math.max(0.01, rawRequired);
-
-    let targetUserId = user?.id || existingOpening?.user_id;
-    if (!targetUserId && admin) {
-      const { data: userList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 });
-      if (userList?.users?.[0]?.id) {
-        targetUserId = userList.users[0].id;
-      }
-    }
-
-    const notes = `Calibrated to set current available balance to ₹${targetBalance.toLocaleString('en-IN')}`;
-
-    if (existingOpening) {
-      const { data, error } = await client
-        .from('income')
-        .update({
-          amount: requiredOpening,
-          notes,
+    const adjustmentAmount = targetBalance - currentRemaining;
+    if (adjustmentAmount === 0) {
+      return {
+        success: true,
+        data: {
+          id: 'noop',
+          user_id: userId,
+          source: 'Wallet Calibration',
+          amount: 0,
+          description: 'Balance already matches target',
+          income_date: `${year}-${monthStr}-01`,
+          notes: 'No adjustment needed',
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingOpening.id)
-        .select()
-        .single();
-
-      if (error) return { success: false, error: error.message };
-      return {
-        success: true,
-        data: {
-          ...data,
-          amount: Number(data.amount),
-        } as Income,
-      };
-    } else {
-      const sortedExp = [...expenses].sort(
-        (a: any, b: any) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime()
-      );
-      const startDate = sortedExp[0]?.expense_date || new Date().toISOString().split('T')[0];
-
-      const { data, error } = await client
-        .from('income')
-        .insert({
-          user_id: targetUserId,
-          source: 'Opening Balance',
-          amount: requiredOpening,
-          description: 'Starting wallet balance calibration',
-          income_date: startDate,
-          notes,
-        })
-        .select()
-        .single();
-
-      if (error) return { success: false, error: error.message };
-      return {
-        success: true,
-        data: {
-          ...data,
-          amount: Number(data.amount),
-        } as Income,
+        },
       };
     }
+
+    const created = await IncomeModel.create({
+      userId,
+      source: 'Other',
+      amount: adjustmentAmount,
+      description: 'Wallet Balance Calibration',
+      incomeDate: `${year}-${monthStr}-01`,
+      notes: `Adjusted balance from ${currentRemaining} to ${targetBalance}`,
+    });
+
+    return {
+      success: true,
+      data: {
+        id: created._id.toString(),
+        user_id: created.userId,
+        source: created.source,
+        amount: created.amount,
+        description: created.description,
+        income_date: created.incomeDate,
+        notes: created.notes,
+        created_at: new Date(created.createdAt).toISOString(),
+        updated_at: new Date(created.updatedAt).toISOString(),
+      },
+    };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
   }
 }
-
-

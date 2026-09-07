@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LocalFinanceStore } from '@/lib/data-service';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { Category, CategoryType } from '@/types';
 import {
   CategoryIcon,
@@ -49,9 +49,9 @@ export default function CategoriesPage() {
   const loadData = async () => {
     try {
       const [cats, expenses, incomes] = await Promise.all([
-        SupabaseFinanceService.getCategories(),
-        SupabaseFinanceService.getExpenses(),
-        SupabaseFinanceService.getIncomes(),
+        FinanceService.getCategories(),
+        FinanceService.getExpenses(),
+        FinanceService.getIncomes(),
       ]);
       setCategories(cats);
 
@@ -130,7 +130,7 @@ export default function CategoriesPage() {
     }
 
     if (editingCategory) {
-      await SupabaseFinanceService.updateCategory(editingCategory.id, {
+      await FinanceService.updateCategory(editingCategory.id, {
         name: cleanName,
         type,
         color,
@@ -138,7 +138,7 @@ export default function CategoriesPage() {
       });
       showFeedback(`Category "${cleanName}" updated successfully.`);
     } else {
-      await SupabaseFinanceService.addCategory({
+      await FinanceService.addCategory({
         user_id: null,
         name: cleanName,
         type,
@@ -160,7 +160,7 @@ export default function CategoriesPage() {
         : `Are you sure you want to delete category "${cat.name}"?`;
 
     if (confirm(warning)) {
-      await SupabaseFinanceService.deleteCategory(cat.id);
+      await FinanceService.deleteCategory(cat.id);
       showFeedback(`Category "${cat.name}" removed.`);
       await loadData();
     }

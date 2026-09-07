@@ -238,6 +238,18 @@ export default function LoginPage() {
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
               <span>Continue with Demo Student Account</span>
             </button>
+
+            <div className="text-center pt-2">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Don&apos;t have an account?{' '}
+                <Link
+                  href="/signup"
+                  className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  Create one
+                </Link>
+              </span>
+            </div>
           </form>
         </div>
       </div>

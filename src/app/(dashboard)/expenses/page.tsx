@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { Expense } from '@/types';
 import { formatCurrency, formatDate, getMonthName } from '@/lib/utils';
 import { useExcludedCategories } from '@/lib/exclusions';
@@ -38,7 +38,7 @@ export default function ExpensesPage({
   const { excludedCategories, isExcluded } = useExcludedCategories(selectedMonth, selectedYear);
 
   const loadCategories = async () => {
-    const cats = await SupabaseFinanceService.getCategories();
+    const cats = await FinanceService.getCategories();
     setCategories(cats.filter((c) => c.type === 'expense'));
   };
 
@@ -80,7 +80,7 @@ export default function ExpensesPage({
   };
 
   const loadExpenses = async () => {
-    const list = await SupabaseFinanceService.getExpenses(selectedMonth, selectedYear);
+    const list = await FinanceService.getExpenses(selectedMonth, selectedYear);
     setExpenses(list);
   };
 
@@ -90,7 +90,7 @@ export default function ExpensesPage({
 
   const handleDelete = async (id: string, description: string) => {
     if (confirm(`Are you sure you want to delete "${description}"?`)) {
-      await SupabaseFinanceService.deleteExpense(id);
+      await FinanceService.deleteExpense(id);
       await loadExpenses();
     }
   };

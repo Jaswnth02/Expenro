@@ -13,7 +13,7 @@ import { MealDuesSummaryCard } from '@/components/meals/meal-dues-summary-card';
 import { QuickMealLogger } from '@/components/meals/quick-meal-logger';
 import { MonthlyMealCalendar } from '@/components/meals/monthly-meal-calendar';
 import { SettleDuesModal } from '@/components/meals/settle-dues-modal';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import {
   MonthlyMealSummary,
   MealEntry,
@@ -59,8 +59,8 @@ export default function MealTrackerPage({
   const refreshData = useCallback(async () => {
     try {
       const [sum, settlements] = await Promise.all([
-        SupabaseFinanceService.getMonthlyMealSummary(selectedMonth, selectedYear),
-        SupabaseFinanceService.getMealSettlements(),
+        FinanceService.getMonthlyMealSummary(selectedMonth, selectedYear),
+        FinanceService.getMealSettlements(),
       ]);
       setSummary(sum);
       setPastSettlements(settlements);
@@ -72,8 +72,8 @@ export default function MealTrackerPage({
   useEffect(() => {
     let isMounted = true;
     Promise.all([
-      SupabaseFinanceService.getMonthlyMealSummary(selectedMonth, selectedYear),
-      SupabaseFinanceService.getMealSettlements(),
+      FinanceService.getMonthlyMealSummary(selectedMonth, selectedYear),
+      FinanceService.getMealSettlements(),
     ]).then(([sum, settlements]) => {
       if (isMounted) {
         setSummary(sum);
@@ -112,7 +112,7 @@ export default function MealTrackerPage({
     status: MealStatus;
     notes?: string;
   }) => {
-    await SupabaseFinanceService.addMealEntry({
+    await FinanceService.addMealEntry({
       user_id: 'user-default-1',
       date: selectedDate,
       meal_type: entry.meal_type,
@@ -128,13 +128,13 @@ export default function MealTrackerPage({
 
   // Update meal
   const handleUpdateMeal = async (id: string, updates: Partial<MealEntry>) => {
-    await SupabaseFinanceService.updateMealEntry(id, updates);
+    await FinanceService.updateMealEntry(id, updates);
     await refreshData();
   };
 
   // Delete meal
   const handleDeleteMeal = async (id: string) => {
-    await SupabaseFinanceService.deleteMealEntry(id);
+    await FinanceService.deleteMealEntry(id);
     await refreshData();
   };
 
@@ -147,7 +147,7 @@ export default function MealTrackerPage({
     createExpense: boolean;
     notes?: string;
   }) => {
-    await SupabaseFinanceService.settleMonthlyMeals(params);
+    await FinanceService.settleMonthlyMeals(params);
     await refreshData();
   };
 

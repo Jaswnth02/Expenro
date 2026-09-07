@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Wallet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 
 interface SetBalanceModalProps {
   isOpen: boolean;
@@ -50,7 +50,7 @@ export function SetBalanceModal({
     setError(null);
 
     try {
-      await SupabaseFinanceService.calibrateWalletBalance(parsed);
+      await FinanceService.calibrateWalletBalance(parsed);
       await Promise.resolve(onSuccess());
       onClose();
     } catch (err: any) {

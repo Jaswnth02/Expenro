@@ -13,8 +13,7 @@ import { HealthScoreCard } from '@/components/dashboard/health-score-card';
 import { InsightsCard } from '@/components/dashboard/insights-card';
 import { DueRegularExpensesCard } from '@/components/dashboard/due-regular-expenses-card';
 import { MealDuesWidget } from '@/components/dashboard/meal-dues-widget';
-import { LocalFinanceStore } from '@/lib/data-service';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import {
   calculateFinancialHealthScore,
   generateFinancialInsights,
@@ -79,12 +78,12 @@ export default function DashboardPage({
     try {
       const [dbSummary, activeExpenses, activeIncomes, activeGoals, activeBudgets, activeCategories] =
         await Promise.all([
-          SupabaseFinanceService.getFinancialSummary(selectedMonth, selectedYear),
-          SupabaseFinanceService.getExpenses(selectedMonth, selectedYear),
-          SupabaseFinanceService.getIncomes(selectedMonth, selectedYear),
-          SupabaseFinanceService.getSavingsGoals(),
-          SupabaseFinanceService.getBudgets(selectedMonth, selectedYear),
-          SupabaseFinanceService.getCategories(),
+          FinanceService.getFinancialSummary(selectedMonth, selectedYear),
+          FinanceService.getExpenses(selectedMonth, selectedYear),
+          FinanceService.getIncomes(selectedMonth, selectedYear),
+          FinanceService.getSavingsGoals(),
+          FinanceService.getBudgets(selectedMonth, selectedYear),
+          FinanceService.getCategories(),
         ]);
 
       setSummary(dbSummary);

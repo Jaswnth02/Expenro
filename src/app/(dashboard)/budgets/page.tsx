@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LocalFinanceStore } from '@/lib/data-service';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { Budget } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { Plus, PieChart, AlertTriangle, CheckCircle, ShieldAlert, X } from 'lucide-react';
@@ -14,8 +14,9 @@ export default function BudgetsPage() {
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
 
-  const loadBudgets = () => {
-    setBudgets(LocalFinanceStore.getBudgets(9, 2026));
+  const loadBudgets = async () => {
+    const list = await FinanceService.getBudgets(9, 2026);
+    setBudgets(list);
   };
 
   const [categories, setCategories] = useState<any[]>([]);
@@ -23,7 +24,7 @@ export default function BudgetsPage() {
   useEffect(() => {
     loadBudgets();
     const init = async () => {
-      const cats = await SupabaseFinanceService.getCategories();
+      const cats = await FinanceService.getCategories();
       const expenseCats = cats.filter((c) => c.type === 'expense');
       setCategories(expenseCats);
       if (expenseCats.length > 0 && !categoryId) {
@@ -33,22 +34,16 @@ export default function BudgetsPage() {
     init();
   }, []);
 
-  const handleSaveBudget = (e: React.FormEvent) => {
+  const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(amount);
     if (isNaN(num) || num <= 0 || !categoryId) return;
 
-    LocalFinanceStore.addOrUpdateBudget({
-      user_id: 'user-default-1',
-      category_id: categoryId,
-      amount: num,
-      month: 9,
-      year: 2026,
-    });
+    await FinanceService.setBudget(categoryId, num, 9, 2026);
 
     setAmount('');
     setIsModalOpen(false);
-    loadBudgets();
+    await loadBudgets();
   };
 
   return (

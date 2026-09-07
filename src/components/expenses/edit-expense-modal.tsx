@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { X, Pencil, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Expense, Category, PaymentMethod } from '@/types';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { getTodayDateString } from '@/lib/utils';
 
 interface EditExpenseModalProps {
@@ -75,7 +75,7 @@ function EditExpenseFormModal({
     try {
       const selectedCat = categories.find((c) => c.id === categoryId);
 
-      const updated = await SupabaseFinanceService.updateExpense(expense.id, {
+      const updated = await FinanceService.updateExpense(expense.id, {
         amount: parsedAmount,
         category_id: categoryId || null,
         category: selectedCat,

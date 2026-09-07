@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { LocalFinanceStore } from '@/lib/data-service';
 import { SavingsGoal, SavingsTransaction } from '@/types';
 import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
@@ -29,7 +29,7 @@ export default function SavingsPage() {
 
   const loadSavingsData = async () => {
     try {
-      const gList = await SupabaseFinanceService.getSavingsGoals();
+      const gList = await FinanceService.getSavingsGoals();
       const tList = LocalFinanceStore.getSavingsTransactions();
       setGoals(gList);
       setTransactions(tList);
@@ -56,7 +56,7 @@ export default function SavingsPage() {
     const target = parseFloat(targetAmount);
     if (isNaN(target) || target <= 0 || !goalName.trim()) return;
 
-    await SupabaseFinanceService.addSavingsGoal({
+    await FinanceService.addSavingsGoal({
       user_id: 'user-default-1',
       name: goalName.trim(),
       target_amount: target,
@@ -74,7 +74,7 @@ export default function SavingsPage() {
 
   const handleDeleteGoal = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete the goal "${name}"?`)) {
-      await SupabaseFinanceService.deleteSavingsGoal(id);
+      await FinanceService.deleteSavingsGoal(id);
       await loadSavingsData();
     }
   };
@@ -84,7 +84,7 @@ export default function SavingsPage() {
     const amt = parseFloat(depositAmount);
     if (isNaN(amt) || amt <= 0 || !selectedGoalId) return;
 
-    await SupabaseFinanceService.addSavingsTransaction({
+    await FinanceService.addSavingsTransaction({
       user_id: 'user-default-1',
       goal_id: selectedGoalId,
       amount: amt,
@@ -100,7 +100,7 @@ export default function SavingsPage() {
 
   const handleDeleteTransaction = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this deposit record?')) {
-      await SupabaseFinanceService.deleteSavingsTransaction(id);
+      await FinanceService.deleteSavingsTransaction(id);
       await loadSavingsData();
     }
   };

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { X, CheckCircle2, AlertCircle, PlusCircle, ArrowDownRight, ArrowUpRight, Plus, Check } from 'lucide-react';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { useAuth } from '@/context/auth-context';
 import { getTodayDateString } from '@/lib/utils';
 import { PaymentMethod } from '@/types';
@@ -53,7 +53,7 @@ export function QuickAddModal({
   const [categories, setCategories] = useState<{ id: string; name: string; color?: string }[]>([]);
 
   const refreshCategories = async (autoSelectId?: string) => {
-    const cats = (await SupabaseFinanceService.getCategories()).filter((c) => c.type === 'expense');
+    const cats = (await FinanceService.getCategories()).filter((c) => c.type === 'expense');
     setCategories(cats);
     if (autoSelectId) {
       setCategoryId(autoSelectId);
@@ -82,7 +82,7 @@ export function QuickAddModal({
     const clean = newCatName.trim();
     if (!clean) return;
 
-    const created = await SupabaseFinanceService.addCategory({
+    const created = await FinanceService.addCategory({
       user_id: user?.id || null,
       name: clean,
       type: 'expense',
@@ -116,7 +116,7 @@ export function QuickAddModal({
       const finalDescription = description.trim() || selectedCat?.name || 'Expense';
 
       try {
-        await SupabaseFinanceService.addExpense({
+        await FinanceService.addExpense({
           user_id: user?.id || 'user-default-1',
           category_id: categoryId,
           amount: numAmount,
@@ -145,7 +145,7 @@ export function QuickAddModal({
       const finalDescription = description.trim() || finalSource;
 
       try {
-        await SupabaseFinanceService.addIncome({
+        await FinanceService.addIncome({
           user_id: user?.id || 'user-default-1',
           source: finalSource,
           amount: numAmount,

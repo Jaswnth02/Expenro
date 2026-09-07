@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { useAuth } from '@/context/auth-context';
 import { Income, Category } from '@/types';
 import { formatCurrency, formatDate, getTodayDateString, getMonthName } from '@/lib/utils';
@@ -34,7 +34,7 @@ export default function IncomePage() {
   const [newCatName, setNewCatName] = useState('');
 
   const refreshIncomeCategories = async () => {
-    const cats = await SupabaseFinanceService.getCategories();
+    const cats = await FinanceService.getCategories();
     const incomeCats = cats.filter((c) => c.type === 'income');
     setIncomeCategories(incomeCats);
     if (incomeCats.length > 0) {
@@ -101,10 +101,10 @@ export default function IncomePage() {
   };
 
   const loadIncomes = async () => {
-    const all = await SupabaseFinanceService.getIncomes();
+    const all = await FinanceService.getIncomes();
     setAllTimeIncomes(all);
 
-    const summary = await SupabaseFinanceService.getFinancialSummary(selectedMonth || 9, selectedYear || 2026);
+    const summary = await FinanceService.getFinancialSummary(selectedMonth || 9, selectedYear || 2026);
     setWalletBalance(summary.availableBalance ?? summary.remainingBalance);
     setIsLowBalance(summary.isLowBalance ?? false);
     setLowBalanceThreshold(summary.lowBalanceThreshold ?? 1000);
@@ -112,7 +112,7 @@ export default function IncomePage() {
     if (selectedMonth === 0) {
       setIncomes(all);
     } else {
-      const list = await SupabaseFinanceService.getIncomes(selectedMonth, selectedYear);
+      const list = await FinanceService.getIncomes(selectedMonth, selectedYear);
       setIncomes(list);
     }
   };
@@ -123,7 +123,7 @@ export default function IncomePage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Delete this income record?')) {
-      await SupabaseFinanceService.deleteIncome(id);
+      await FinanceService.deleteIncome(id);
       await loadIncomes();
     }
   };
@@ -133,7 +133,7 @@ export default function IncomePage() {
     const clean = newCatName.trim();
     if (!clean) return;
 
-    const created = await SupabaseFinanceService.addCategory({
+    const created = await FinanceService.addCategory({
       user_id: user?.id || null,
       name: clean,
       type: 'income',
@@ -161,7 +161,7 @@ export default function IncomePage() {
     setError(null);
 
     try {
-      await SupabaseFinanceService.addIncome({
+      await FinanceService.addIncome({
         user_id: user?.id || 'user-default-1',
         source: finalSource,
         amount: numAmount,

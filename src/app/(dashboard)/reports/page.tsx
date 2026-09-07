@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { SupabaseFinanceService } from '@/lib/supabase/data-service';
+import { FinanceService } from '@/lib/mongodb/data-service';
 import { Expense, FinancialSummary } from '@/types';
 import { formatCurrency, getMonthName } from '@/lib/utils';
 import { useExcludedCategories, getExcludedCategories, filterIncludedExpenses } from '@/lib/exclusions';
@@ -97,10 +97,10 @@ export default function ReportsPage() {
     setIsLoading(true);
     try {
       const [activeExpenses, previousExpenses, activeSummary, previousSummary] = await Promise.all([
-        SupabaseFinanceService.getExpenses(selectedMonth, selectedYear),
-        SupabaseFinanceService.getExpenses(prevMonth, prevYear),
-        SupabaseFinanceService.getFinancialSummary(selectedMonth, selectedYear),
-        SupabaseFinanceService.getFinancialSummary(prevMonth, prevYear),
+        FinanceService.getExpenses(selectedMonth, selectedYear),
+        FinanceService.getExpenses(prevMonth, prevYear),
+        FinanceService.getFinancialSummary(selectedMonth, selectedYear),
+        FinanceService.getFinancialSummary(prevMonth, prevYear),
       ]);
 
       setExpenses(activeExpenses);
