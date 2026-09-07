@@ -50,16 +50,13 @@ export default function LoginPage() {
     }
 
     try {
-      // 1. Authenticate via Server Action to write SSR session cookies directly to HTTP response headers
-      const serverResult = await loginAction(cleanEmail, targetPassword);
-      if (!serverResult.success) {
-        setError(serverResult.error || 'Invalid email or password. Please try again.');
+      // 1. Authenticate via signIn which runs loginAction and syncs auth state
+      const { error: signInError } = await signIn(cleanEmail, targetPassword);
+      if (signInError) {
+        setError(signInError.message || 'Invalid email or password. Please try again.');
         setLoading(false);
         return;
       }
-
-      // 2. Sync client-side Supabase auth state
-      await signIn(cleanEmail, targetPassword);
 
       // 3. Clear any legacy demo cookie
       if (typeof document !== 'undefined') {

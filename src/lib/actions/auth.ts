@@ -72,21 +72,28 @@ export async function loginAction(
 
     const conn = await connectToDatabase();
     if (!conn) {
+      console.error('[Auth] MongoDB connection failed during login for:', email);
       return {
         success: false,
         error: 'Unable to connect to MongoDB. Please check if your MongoDB server or Atlas cluster is running.',
       };
     }
 
+    console.log('[Auth] Connected to DB:', conn.connection.name, 'searching for user:', email);
     const user = await UserModel.findOne({ email });
     if (!user) {
+      console.warn('[Auth] User not found in database:', email);
       return { success: false, error: 'Invalid email or password.' };
     }
 
+    console.log('[Auth] User found:', user.email, 'comparing password hash...');
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
+      console.warn('[Auth] Password does NOT match stored hash for:', email);
       return { success: false, error: 'Invalid email or password.' };
     }
+
+    console.log('[Auth] Password match SUCCESS for user:', user.email);
 
     const token = await signSessionToken({
       userId: user._id.toString(),
@@ -105,6 +112,51 @@ export async function loginAction(
       },
     };
   } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Auth] Unexpected error during login:', message);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Reset user password in MongoDB Atlas.
+ */
+export async function resetPasswordAction(
+  emailInput: string,
+  newPasswordInput: string
+): Promise<AuthResponse> {
+  try {
+    let email = (emailInput || '').trim().toLowerCase();
+    const newPassword = newPasswordInput || '';
+
+    if (email === 'jaswanthm2006@gmail.com') {
+      email = 'jaswanthmg2006@gmail.com';
+    }
+
+    if (!email || !newPassword) {
+      return { success: false, error: 'Email and new password are required.' };
+    }
+
+    if (newPassword.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters.' };
+    }
+
+    await connectToDatabase();
+    const user = await UserModel.findOne({ email });
+    if (!user) {
+      return { success: false, error: 'No account found with this email.' };
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    user.passwordHash = passwordHash;
+    user.updatedAt = new Date();
+    await user.save();
+
+    console.log('[Auth] Password reset successfully for:', email);
+    return { success: true };
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
   }

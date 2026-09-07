@@ -33,10 +33,12 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
     const uri = process.env.MONGODB_URI!;
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 15000,
+      dbName: 'expenro',
     };
 
     cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
+      console.log('[MongoDB] Connected successfully to database:', mongooseInstance.connection.name);
       return mongooseInstance;
     });
   }
