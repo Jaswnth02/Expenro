@@ -40,9 +40,13 @@ export default function DashboardPage({
   refreshKey = 0,
   onOpenQuickAdd,
 }: DashboardPageProps) {
-  // Selected month and year (Default to September 2026 as per spec)
-  const [selectedMonth, setSelectedMonth] = useState(9);
-  const [selectedYear, setSelectedYear] = useState(2026);
+  // Selected month and year (Defaults to active calendar month so every month on day 1 it automatically resets to 0)
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
+  const [selectedYear, setSelectedYear] = useState(() => currentYear);
 
   const [summary, setSummary] = useState<FinancialSummary>({
     totalIncome: 0,
@@ -50,8 +54,8 @@ export default function DashboardPage({
     totalSavings: 0,
     remainingBalance: 0,
     savingsRate: 0,
-    month: 9,
-    year: 2026,
+    month: currentMonth,
+    year: currentYear,
   });
 
   const [expenses, setExpenses] = useState<Expense[]>([]);

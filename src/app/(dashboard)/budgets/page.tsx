@@ -13,9 +13,12 @@ export default function BudgetsPage() {
 
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
 
   const loadBudgets = async () => {
-    const list = await FinanceService.getBudgets(9, 2026);
+    const list = await FinanceService.getBudgets(currentMonth, currentYear);
     setBudgets(list);
   };
 
@@ -39,7 +42,7 @@ export default function BudgetsPage() {
     const num = parseFloat(amount);
     if (isNaN(num) || num <= 0 || !categoryId) return;
 
-    await FinanceService.setBudget(categoryId, num, 9, 2026);
+    await FinanceService.setBudget(categoryId, num, currentMonth, currentYear);
 
     setAmount('');
     setIsModalOpen(false);

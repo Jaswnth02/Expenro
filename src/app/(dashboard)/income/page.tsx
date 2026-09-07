@@ -13,8 +13,8 @@ export default function IncomePage() {
   const { user } = useAuth();
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(9);
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
 
   // Form states

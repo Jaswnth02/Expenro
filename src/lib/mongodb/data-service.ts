@@ -676,7 +676,11 @@ export const FinanceService = {
     return LocalFinanceStore.setLowBalanceThreshold(amount);
   },
 
-  async calibrateWalletBalance(targetBalance: number, month = 9, year = 2026): Promise<Income> {
+  async calibrateWalletBalance(
+    targetBalance: number,
+    month = new Date().getMonth() + 1,
+    year = new Date().getFullYear()
+  ): Promise<Income> {
     const localOptimistic = LocalFinanceStore.calibrateWalletBalance(targetBalance);
     if (!isMongoConfigured()) return localOptimistic;
 

@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 
 export default function ReportsPage() {
-  const [selectedMonth, setSelectedMonth] = useState(9);
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
