@@ -11,6 +11,9 @@ import {
   RegularExpense,
   RegularExpenseInput,
   PaymentMethod,
+  MealEntry,
+  MealSettlement,
+  MonthlyMealSummary,
 } from '@/types';
 import { getEligibleRegularExpenses as filterEligibleExpenses } from '@/lib/calculations/regular-expenses';
 import { LocalFinanceStore, DEFAULT_CATEGORIES, ALLOWED_EXPENSE_CATEGORIES } from '@/lib/data-service';
@@ -228,6 +231,77 @@ export const SupabaseFinanceService = {
       } as Expense;
     } catch {
       return LocalFinanceStore.addExpense(expense);
+    }
+  },
+
+  async updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | null> {
+    const local = LocalFinanceStore.updateExpense(id, updates);
+    if (!isSupabaseConfigured()) {
+      return local;
+    }
+
+    try {
+      const supabase = createClient();
+      const isUUID = (str?: string | null) =>
+        str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.amount !== undefined) dbUpdates.amount = Number(updates.amount);
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.expense_date !== undefined) dbUpdates.expense_date = updates.expense_date;
+      if (updates.payment_method !== undefined) dbUpdates.payment_method = updates.payment_method;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+
+      if (updates.category_id !== undefined) {
+        let validCatId: string | null = updates.category_id || null;
+        if (validCatId && !isUUID(validCatId)) {
+          const localCat = LocalFinanceStore.getCategories().find((c) => c.id === validCatId);
+          if (localCat) {
+            const { data: matched } = await supabase
+              .from('categories')
+              .select('id')
+              .ilike('name', localCat.name)
+              .maybeSingle();
+            if (matched) {
+              validCatId = matched.id;
+            } else {
+              const {
+                data: { user },
+              } = await supabase.auth.getUser();
+              const { data: created } = await supabase
+                .from('categories')
+                .insert({
+                  user_id: user?.id || null,
+                  name: localCat.name,
+                  type: localCat.type,
+                  color: localCat.color,
+                  icon: localCat.icon,
+                })
+                .select('id')
+                .maybeSingle();
+              if (created) validCatId = created.id;
+            }
+          }
+        }
+        dbUpdates.category_id = validCatId;
+      }
+
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(dbUpdates)
+        .eq('id', id)
+        .select('*, category:categories(*)')
+        .maybeSingle();
+
+      if (error || !data) return local;
+
+      return {
+        ...data,
+        amount: Number(data.amount),
+        category: data.category || null,
+      } as Expense;
+    } catch {
+      return local;
     }
   },
 
@@ -646,7 +720,7 @@ export const SupabaseFinanceService = {
       // Cumulative real running available cash balance
       const availableBalance = Number((allTimeIncome - allTimeExpenses - allTimeSavings).toFixed(2));
       const lowBalanceThreshold = LocalFinanceStore.getLowBalanceThreshold();
-      const isLowBalance = availableBalance <= lowBalanceThreshold;
+      const isLowBalance = availableBalance < lowBalanceThreshold;
 
       const sortedIncomes = [...allIncomes].sort(
         (a, b) => new Date(b.income_date).getTime() - new Date(a.income_date).getTime()
@@ -969,5 +1043,139 @@ export const SupabaseFinanceService = {
     }
 
     return createdExpenses;
+  },
+
+  // ----------------------------------------------------------------------------
+  // MEALS & MESS TRACKER
+  // ----------------------------------------------------------------------------
+  async getMealEntries(month?: number, year?: number): Promise<MealEntry[]> {
+    if (!isSupabaseConfigured()) {
+      return LocalFinanceStore.getMealEntries(month, year);
+    }
+    try {
+      const supabase = createClient();
+      let query = supabase.from('meal_entries').select('*').order('date', { ascending: true });
+      if (month !== undefined && year !== undefined) {
+        const monthStr = String(month).padStart(2, '0');
+        const startDate = `${year}-${monthStr}-01`;
+        const nextMonth = month === 12 ? 1 : month + 1;
+        const nextYear = month === 12 ? year + 1 : year;
+        const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+        query = query.gte('date', startDate).lt('date', endDate);
+      }
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) {
+        return LocalFinanceStore.getMealEntries(month, year);
+      }
+      return data as MealEntry[];
+    } catch {
+      return LocalFinanceStore.getMealEntries(month, year);
+    }
+  },
+
+  async addMealEntry(
+    entry: Omit<MealEntry, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<MealEntry> {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.from('meal_entries').insert([entry]).select().single();
+        if (!error && data) {
+          LocalFinanceStore.addMealEntry(entry);
+          return data as MealEntry;
+        }
+      } catch {}
+    }
+    return LocalFinanceStore.addMealEntry(entry);
+  },
+
+  async updateMealEntry(id: string, updates: Partial<MealEntry>): Promise<MealEntry | null> {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.from('meal_entries').update(updates).eq('id', id).select().single();
+        if (!error && data) {
+          LocalFinanceStore.updateMealEntry(id, updates);
+          return data as MealEntry;
+        }
+      } catch {}
+    }
+    return LocalFinanceStore.updateMealEntry(id, updates);
+  },
+
+  async deleteMealEntry(id: string): Promise<boolean> {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { error } = await supabase.from('meal_entries').delete().eq('id', id);
+        if (!error) {
+          LocalFinanceStore.deleteMealEntry(id);
+          return true;
+        }
+      } catch {}
+    }
+    return LocalFinanceStore.deleteMealEntry(id);
+  },
+
+  async getMealSettlements(): Promise<MealSettlement[]> {
+    if (!isSupabaseConfigured()) {
+      return LocalFinanceStore.getMealSettlements();
+    }
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('meal_settlements').select('*').order('created_at', { ascending: false });
+      if (error || !data || data.length === 0) {
+        return LocalFinanceStore.getMealSettlements();
+      }
+      return data as MealSettlement[];
+    } catch {
+      return LocalFinanceStore.getMealSettlements();
+    }
+  },
+
+  async settleMonthlyMeals(params: {
+    month: number;
+    year: number;
+    paymentMethod: PaymentMethod;
+    paymentDate: string;
+    createExpense?: boolean;
+    notes?: string;
+  }): Promise<{ settlement: MealSettlement; expense?: Expense }> {
+    const result = LocalFinanceStore.settleMonthlyMeals(params);
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        await supabase.from('meal_settlements').insert([result.settlement]);
+        if (result.expense) {
+          try {
+            await this.addExpense({
+              user_id: result.expense.user_id,
+              category_id: result.expense.category_id,
+              amount: result.expense.amount,
+              description: result.expense.description,
+              payment_method: result.expense.payment_method,
+              expense_date: result.expense.expense_date,
+              notes: result.expense.notes,
+              receipt_url: result.expense.receipt_url,
+            });
+          } catch {}
+        }
+        const monthStr = String(params.month).padStart(2, '0');
+        const startDate = `${params.year}-${monthStr}-01`;
+        const nextMonth = params.month === 12 ? 1 : params.month + 1;
+        const nextYear = params.month === 12 ? params.year + 1 : params.year;
+        const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+        await supabase
+          .from('meal_entries')
+          .update({ is_settled: true, settlement_id: result.settlement.id })
+          .gte('date', startDate)
+          .lt('date', endDate);
+      } catch {}
+    }
+    return result;
+  },
+
+  async getMonthlyMealSummary(month: number, year: number): Promise<MonthlyMealSummary> {
+    return LocalFinanceStore.getMonthlyMealSummary(month, year);
   },
 };

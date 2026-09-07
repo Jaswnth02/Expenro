@@ -5,7 +5,8 @@ import { SupabaseFinanceService } from '@/lib/supabase/data-service';
 import { Expense } from '@/types';
 import { formatCurrency, formatDate, getMonthName } from '@/lib/utils';
 import { useExcludedCategories } from '@/lib/exclusions';
-import { Search, Trash2, Calendar, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Search, Trash2, Pencil, Calendar, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { EditExpenseModal } from '@/components/expenses/edit-expense-modal';
 
 interface DayGroup {
   date: string;
@@ -28,6 +29,10 @@ export default function ExpensesPage({
   const [selectedMonth, setSelectedMonth] = useState(9);
   const [selectedYear, setSelectedYear] = useState(2026);
   const [categories, setCategories] = useState<any[]>([]);
+
+  // Edit / Modify expense modal state
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Month-scoped excluded categories
   const { excludedCategories, isExcluded } = useExcludedCategories(selectedMonth, selectedYear);
@@ -90,6 +95,15 @@ export default function ExpensesPage({
     }
   };
 
+  const handleOpenEdit = (exp: Expense) => {
+    setEditingExpense(exp);
+    setIsEditModalOpen(true);
+  };
+
+  const handleExpenseUpdated = async () => {
+    await loadExpenses();
+  };
+
   const filteredExpenses = expenses.filter((e) => {
     const matchesSearch =
       e.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,7 +150,7 @@ export default function ExpensesPage({
       }
 
       // If viewing all categories, only include active (non-excluded) categories in Day Total
-      const isItemExcluded = selectedCategory === 'all' && isExcluded(exp.category?.name);
+      const isItemExcluded = selectedCategory === 'all' && isExcluded(exp);
       if (!isItemExcluded) {
         group.totalAmount += Number(exp.amount);
       }
@@ -152,7 +166,7 @@ export default function ExpensesPage({
       return filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
     }
     return filteredExpenses.reduce((sum, e) => {
-      if (isExcluded(e.category?.name)) return sum;
+      if (isExcluded(e)) return sum;
       return sum + Number(e.amount);
     }, 0);
   }, [filteredExpenses, selectedCategory, isExcluded]);
@@ -304,26 +318,42 @@ export default function ExpensesPage({
                           <div className="flex flex-col items-end">
                             <span
                               className={`text-xs sm:text-sm font-bold ${
-                                isExcluded(exp.category?.name)
+                                isExcluded(exp)
                                   ? 'text-zinc-400 dark:text-zinc-500 line-through'
                                   : 'text-rose-600 dark:text-rose-400'
                               }`}
                             >
                               -{formatCurrency(exp.amount)}
                             </span>
-                            {isExcluded(exp.category?.name) && (
+                            {isExcluded(exp) ? (
                               <span className="text-[9px] font-semibold px-1 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40">
                                 Excluded
                               </span>
-                            )}
+                            ) : exp.description?.toLowerCase().includes('mess food bill') ? (
+                              <span className="text-[9px] font-bold px-1 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                                Paid Bill
+                              </span>
+                            ) : null}
                           </div>
-                          <button
-                            onClick={() => handleDelete(exp.id, exp.description)}
-                            aria-label="Delete expense"
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active:scale-95 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(exp)}
+                              title="Modify expense (amount, category, date)"
+                              aria-label="Modify expense"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors active:scale-95 cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(exp.id, exp.description)}
+                              aria-label="Delete expense"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active:scale-95 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -397,18 +427,22 @@ export default function ExpensesPage({
                           <div className="flex items-center gap-2">
                             <span
                               className={`font-bold ${
-                                isExcluded(exp.category?.name)
+                                isExcluded(exp)
                                   ? 'text-zinc-400 dark:text-zinc-500 line-through'
                                   : 'text-rose-600 dark:text-rose-400'
                               }`}
                             >
                               -{formatCurrency(exp.amount)}
                             </span>
-                            {isExcluded(exp.category?.name) && (
+                            {isExcluded(exp) ? (
                               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40">
                                 Excluded
                               </span>
-                            )}
+                            ) : exp.description?.toLowerCase().includes('mess food bill') ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                                Paid Bill
+                              </span>
+                            ) : null}
                           </div>
                         </td>
 
@@ -422,13 +456,26 @@ export default function ExpensesPage({
 
                         {/* 4. Actions */}
                         <td className="py-2.5 px-4 whitespace-nowrap text-center">
-                          <button
-                            onClick={() => handleDelete(exp.id, exp.description)}
-                            title="Delete expense"
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(exp)}
+                              title="Modify expense (amount, category, date)"
+                              aria-label="Modify expense"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors active:scale-95 cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(exp.id, exp.description)}
+                              title="Delete expense"
+                              aria-label="Delete expense"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active:scale-95 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -439,6 +486,15 @@ export default function ExpensesPage({
           </>
         )}
       </div>
+
+      {/* Modify / Edit Expense Modal */}
+      <EditExpenseModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        expense={editingExpense}
+        categories={categories}
+        onUpdated={handleExpenseUpdated}
+      />
     </div>
   );
 }

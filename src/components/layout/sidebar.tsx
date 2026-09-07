@@ -17,6 +17,7 @@ import {
   Sun,
   LogOut,
   Sparkles,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Logo } from '@/components/branding/logo';
@@ -57,6 +58,7 @@ export function Sidebar({
   const navItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Expenses', href: '/expenses', icon: ArrowDownCircle },
+    { label: 'Meal Tracker', href: '/meals', icon: UtensilsCrossed },
     { label: 'Income', href: '/income', icon: ArrowUpCircle },
     { label: 'Savings', href: '/savings', icon: PiggyBank },
     { label: 'Budgets', href: '/budgets', icon: PieChart },

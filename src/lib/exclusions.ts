@@ -98,6 +98,49 @@ export function isCategoryExcluded(
 }
 
 /**
+ * Checks if an individual expense is excluded.
+ * Daily unpaid meal notes remain excluded, but when a monthly mess food bill is paid
+ * (e.g. via "Pay at Once" or settled expense), it is INCLUDED in expenses and wallet balance.
+ */
+export function isExpenseExcluded<
+  T extends {
+    category?: { name?: string } | null;
+    description?: string;
+    notes?: string | null;
+    is_settled?: boolean;
+  }
+>(
+  expense: T | undefined | null,
+  excludedList?: string[],
+  monthOrKey?: number | string,
+  year?: number
+): boolean {
+  if (!expense || !expense.category?.name) return false;
+  const catName = expense.category.name;
+
+  if (!isCategoryExcluded(catName, excludedList, monthOrKey, year)) {
+    return false;
+  }
+
+  // If this expense is a paid consolidated monthly settlement bill, it MUST be included!
+  const desc = (expense.description || '').toLowerCase();
+  const notes = (expense.notes || '').toLowerCase();
+  const isSettledPayment =
+    (expense as any).is_settled === true ||
+    desc.startsWith('mess food bill') ||
+    desc.includes('food bill settlement') ||
+    desc.includes('meal bill settlement') ||
+    notes.includes('consolidated monthly food bill') ||
+    notes.includes('settlement');
+
+  if (isSettledPayment) {
+    return false; // Paid settlement is included in active expenses
+  }
+
+  return true; // Unpaid daily meal notes remain excluded
+}
+
+/**
  * Toggles a category between excluded (OFF) and included (ON) for a specific month.
  */
 export function toggleCategoryExclusion(
@@ -125,7 +168,9 @@ export function toggleCategoryExclusion(
 /**
  * Filters a list of expenses to return only those belonging to included categories for a month.
  */
-export function filterIncludedExpenses<T extends { category?: { name?: string } | null }>(
+export function filterIncludedExpenses<
+  T extends { category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }
+>(
   expenses: T[],
   excludedList?: string[],
   monthOrKey?: number | string,
@@ -133,19 +178,19 @@ export function filterIncludedExpenses<T extends { category?: { name?: string } 
 ): T[] {
   const list = excludedList !== undefined ? excludedList : getExcludedCategories(monthOrKey, year);
   if (list.length === 0) return expenses;
-  return expenses.filter((e) => !isCategoryExcluded(e.category?.name, list));
+  return expenses.filter((e) => !isExpenseExcluded(e, list, monthOrKey, year));
 }
 
 /**
  * Calculates the total sum of expenses belonging to excluded categories for a month.
  */
 export function calculateExcludedSum<
-  T extends { amount: number | string; category?: { name?: string } | null }
+  T extends { amount: number | string; category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }
 >(expenses: T[], excludedList?: string[], monthOrKey?: number | string, year?: number): number {
   const list = excludedList !== undefined ? excludedList : getExcludedCategories(monthOrKey, year);
   if (list.length === 0) return 0;
   return expenses.reduce((sum, e) => {
-    if (isCategoryExcluded(e.category?.name, list)) {
+    if (isExpenseExcluded(e, list, monthOrKey, year)) {
       return sum + Number(e.amount || 0);
     }
     return sum;
@@ -204,8 +249,13 @@ export function useExcludedCategories(monthOrKey?: number | string, year?: numbe
   }, [monthKey, refresh]);
 
   const isExcluded = useCallback(
-    (name: string | undefined | null) => isCategoryExcluded(name, excludedCategories),
-    [excludedCategories]
+    (target: string | undefined | null | { category?: { name?: string } | null; description?: string; notes?: string | null }) => {
+      if (typeof target === 'object' && target !== null) {
+        return isExpenseExcluded(target, excludedCategories, monthKey);
+      }
+      return isCategoryExcluded(target, excludedCategories, monthKey);
+    },
+    [excludedCategories, monthKey]
   );
 
   const toggleExclusion = useCallback(
@@ -216,10 +266,10 @@ export function useExcludedCategories(monthOrKey?: number | string, year?: numbe
   );
 
   const filterIncluded = useCallback(
-    <T extends { category?: { name?: string } | null }>(expenses: T[]): T[] => {
-      return filterIncludedExpenses(expenses, excludedCategories);
+    <T extends { category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }>(expenses: T[]): T[] => {
+      return filterIncludedExpenses(expenses, excludedCategories, monthKey);
     },
-    [excludedCategories]
+    [excludedCategories, monthKey]
   );
 
   const excludedNamesSet = useMemo(() => {
@@ -231,6 +281,7 @@ export function useExcludedCategories(monthOrKey?: number | string, year?: numbe
     excludedCategories,
     excludedNamesSet,
     isExcluded,
+    isExpenseExcluded: (exp: any) => isExpenseExcluded(exp, excludedCategories, monthKey),
     toggleExclusion,
     filterIncluded,
     hasExclusions: excludedCategories.length > 0,

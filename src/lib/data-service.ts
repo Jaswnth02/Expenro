@@ -10,6 +10,11 @@ import {
   RegularExpense,
   RegularExpenseInput,
   PaymentMethod,
+  MealEntry,
+  MealSettlement,
+  MonthlyMealSummary,
+  MealType,
+  MealStatus,
 } from '@/types';
 import { getEligibleRegularExpenses as filterEligibleExpenses } from '@/lib/calculations/regular-expenses';
 import {
@@ -20,6 +25,7 @@ import {
   calculateRemainingBudget,
   determineBudgetStatus,
 } from '@/lib/calculations/finance';
+import { getMonthName } from '@/lib/utils';
 
 // User-approved active expense categories
 export const ALLOWED_EXPENSE_CATEGORIES = [
@@ -89,6 +95,77 @@ export function getMessFoodHistoricalExpenses(userId = 'user-default-1', categor
       updated_at: iso,
     };
   });
+}
+
+export function getInitialMealSeedData(userId = 'user-default-1'): {
+  mealEntries: MealEntry[];
+  mealSettlements: MealSettlement[];
+} {
+  const mealEntries: MealEntry[] = MESS_COMPACT_DATA.map(([month, day, sess, amount], idx) => {
+    const dayStr = String(day).padStart(2, '0');
+    const date = `2026-${month}-${dayStr}`;
+    const meta = SESSION_META[sess];
+    const mealType: MealType = sess === 'M' ? 'breakfast' : sess === 'A' ? 'lunch' : 'dinner';
+    const isPastMonth = Number(month) < 9;
+    return {
+      id: `meal-entry-${idx + 1}`,
+      user_id: userId,
+      date,
+      meal_type: mealType,
+      name: meta.name,
+      amount,
+      status: 'eaten' as MealStatus,
+      notes: null,
+      is_settled: isPastMonth,
+      settlement_id: isPastMonth ? `settle-2026-${month}` : null,
+      created_at: `${date}T${meta.time}.000Z`,
+      updated_at: `${date}T${meta.time}.000Z`,
+    };
+  });
+
+  const mealSettlements: MealSettlement[] = [
+    {
+      id: 'settle-2026-06',
+      user_id: userId,
+      month: 6,
+      year: 2026,
+      total_meals: mealEntries.filter((m) => m.date.startsWith('2026-06')).length,
+      total_amount: mealEntries.filter((m) => m.date.startsWith('2026-06')).reduce((s, m) => s + m.amount, 0),
+      payment_method: 'UPI',
+      payment_date: '2026-07-01',
+      expense_id: null,
+      notes: 'June Mess bill settled via UPI',
+      created_at: '2026-07-01T10:00:00.000Z',
+    },
+    {
+      id: 'settle-2026-07',
+      user_id: userId,
+      month: 7,
+      year: 2026,
+      total_meals: mealEntries.filter((m) => m.date.startsWith('2026-07')).length,
+      total_amount: mealEntries.filter((m) => m.date.startsWith('2026-07')).reduce((s, m) => s + m.amount, 0),
+      payment_method: 'UPI',
+      payment_date: '2026-08-01',
+      expense_id: null,
+      notes: 'July Mess bill settled via UPI',
+      created_at: '2026-08-01T10:00:00.000Z',
+    },
+    {
+      id: 'settle-2026-08',
+      user_id: userId,
+      month: 8,
+      year: 2026,
+      total_meals: mealEntries.filter((m) => m.date.startsWith('2026-08')).length,
+      total_amount: mealEntries.filter((m) => m.date.startsWith('2026-08')).reduce((s, m) => s + m.amount, 0),
+      payment_method: 'UPI',
+      payment_date: '2026-09-01',
+      expense_id: null,
+      notes: 'August Mess bill settled via UPI',
+      created_at: '2026-09-01T10:00:00.000Z',
+    },
+  ];
+
+  return { mealEntries, mealSettlements };
 }
 
 // Seed initial realistic data matching specification
@@ -173,6 +250,17 @@ export function getInitialSeedData() {
   ];
 
   const incomes: Income[] = [
+    {
+      id: 'inc-open-init',
+      user_id: 'user-default-1',
+      source: 'Opening Balance',
+      amount: 26940,
+      description: 'Starting wallet balance calibration',
+      income_date: '2026-06-01',
+      notes: 'Calibrated to set current available balance to ₹1,000',
+      created_at: '2026-06-01T00:00:00.000Z',
+      updated_at: '2026-09-01T00:00:00.000Z',
+    },
     {
       id: 'inc-1',
       user_id: 'user-default-1',
@@ -383,6 +471,8 @@ export function getInitialSeedData() {
     },
   ];
 
+  const mealSeed = getInitialMealSeedData();
+
   return {
     categories: DEFAULT_CATEGORIES,
     expenses,
@@ -393,6 +483,8 @@ export function getInitialSeedData() {
     regularExpenses,
     regular_expenses_enabled: true,
     low_balance_threshold: 1000,
+    mealEntries: mealSeed.mealEntries,
+    mealSettlements: mealSeed.mealSettlements,
   };
 }
 
@@ -446,6 +538,12 @@ export class LocalFinanceStore {
         parsed.categories.unshift(DEFAULT_CATEGORIES[0]);
         changed = true;
       }
+      if (parsed && (!parsed.mealEntries || !Array.isArray(parsed.mealEntries))) {
+        const mealSeed = getInitialMealSeedData();
+        parsed.mealEntries = mealSeed.mealEntries;
+        parsed.mealSettlements = mealSeed.mealSettlements;
+        changed = true;
+      }
       if (parsed && Array.isArray(parsed.expenses)) {
         if (!parsed.expenses.some((e: any) => e.description?.startsWith('Mess - '))) {
           const messExpenses = getMessFoodHistoricalExpenses('user-default-1', 'cat-mess-food');
@@ -467,6 +565,39 @@ export class LocalFinanceStore {
             reg.category_id = 'cat-mess-food';
             changed = true;
           }
+        }
+      }
+      if (parsed && Array.isArray(parsed.incomes)) {
+        const allExp = (parsed.expenses || []).reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+        const allSav = (parsed.savingsTransactions || []).reduce((s: number, st: any) => s + Number(st.amount || 0), 0);
+        const openingIdx = parsed.incomes.findIndex(
+          (i: any) => i.source?.toLowerCase() === 'opening balance' || i.description?.toLowerCase() === 'opening balance'
+        );
+        const otherInc = parsed.incomes
+          .filter((_: any, idx: number) => idx !== openingIdx)
+          .reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
+        const currentAvail = Number((otherInc + (openingIdx !== -1 ? Number(parsed.incomes[openingIdx].amount || 0) : 0) - allExp - allSav).toFixed(2));
+
+        if (currentAvail !== 1000 || openingIdx === -1) {
+          const reqOpening = Math.max(0.01, Number((1000 + allExp + allSav - otherInc).toFixed(2)));
+          if (openingIdx !== -1) {
+            parsed.incomes[openingIdx].amount = reqOpening;
+            parsed.incomes[openingIdx].notes = 'Calibrated to set current available balance to ₹1,000';
+            parsed.incomes[openingIdx].updated_at = new Date().toISOString();
+          } else {
+            parsed.incomes.push({
+              id: 'inc-open-calibrated',
+              user_id: 'user-default-1',
+              source: 'Opening Balance',
+              amount: reqOpening,
+              description: 'Starting wallet balance calibration',
+              income_date: '2026-06-01',
+              notes: 'Calibrated to set current available balance to ₹1,000',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+          changed = true;
         }
       }
       if (changed) {
@@ -600,9 +731,17 @@ export class LocalFinanceStore {
     const data = this.getData();
     const idx = (data.expenses || []).findIndex((e: Expense) => e.id === id);
     if (idx === -1) return null;
+
+    const categories = this.getCategories();
+    const catMap = new Map(categories.map((c) => [c.id, c]));
+    const targetCatId = updates.category_id !== undefined ? updates.category_id : data.expenses[idx].category_id;
+    const targetCategory = targetCatId ? catMap.get(targetCatId) || updates.category : updates.category;
+
     data.expenses[idx] = {
       ...data.expenses[idx],
       ...updates,
+      category_id: targetCatId,
+      category: targetCategory || data.expenses[idx].category,
       updated_at: new Date().toISOString(),
     };
     this.saveData(data);
@@ -838,7 +977,7 @@ export class LocalFinanceStore {
     // Real Available Balance (running wallet balance across all time)
     const availableBalance = Number((allTimeIncome - allTimeExpenses - allTimeSavings).toFixed(2));
     const lowBalanceThreshold = this.getLowBalanceThreshold();
-    const isLowBalance = availableBalance <= lowBalanceThreshold;
+    const isLowBalance = availableBalance < lowBalanceThreshold;
 
     // Latest replenishment/income transaction
     const sortedIncomes = [...allIncomes].sort(
@@ -1067,6 +1206,177 @@ export class LocalFinanceStore {
     }
 
     return createdExpenses;
+  }
+
+  // --------------------------------------------------------------------------
+  // MEAL & MESS TRACKER
+  // --------------------------------------------------------------------------
+  static getMealEntries(month?: number, year?: number): MealEntry[] {
+    const data = this.getData();
+    let list: MealEntry[] = data.mealEntries || [];
+    if (month !== undefined && year !== undefined) {
+      const monthStr = String(month).padStart(2, '0');
+      const prefix = `${year}-${monthStr}`;
+      list = list.filter((e) => e.date.startsWith(prefix));
+    }
+    const typeOrder: Record<MealType, number> = { breakfast: 1, lunch: 2, dinner: 3, custom: 4 };
+    return [...list].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (typeOrder[a.meal_type] || 5) - (typeOrder[b.meal_type] || 5);
+    });
+  }
+
+  static addMealEntry(
+    entry: Omit<MealEntry, 'id' | 'created_at' | 'updated_at'>
+  ): MealEntry {
+    const data = this.getData();
+    const list: MealEntry[] = data.mealEntries || [];
+    const newEntry: MealEntry = {
+      ...entry,
+      id: 'meal-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    data.mealEntries = [...list, newEntry];
+    this.saveData(data);
+    return newEntry;
+  }
+
+  static updateMealEntry(id: string, updates: Partial<MealEntry>): MealEntry | null {
+    const data = this.getData();
+    const list: MealEntry[] = data.mealEntries || [];
+    const idx = list.findIndex((e) => e.id === id);
+    if (idx === -1) return null;
+    const updated: MealEntry = {
+      ...list[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    list[idx] = updated;
+    data.mealEntries = list;
+    this.saveData(data);
+    return updated;
+  }
+
+  static deleteMealEntry(id: string): boolean {
+    const data = this.getData();
+    const prev = (data.mealEntries || []).length;
+    data.mealEntries = (data.mealEntries || []).filter((e: MealEntry) => e.id !== id);
+    this.saveData(data);
+    return data.mealEntries.length < prev;
+  }
+
+  static getMealSettlements(): MealSettlement[] {
+    const data = this.getData();
+    const settlements: MealSettlement[] = data.mealSettlements || [];
+    return [...settlements].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  static settleMonthlyMeals(params: {
+    month: number;
+    year: number;
+    paymentMethod: PaymentMethod;
+    paymentDate: string;
+    createExpense?: boolean;
+    notes?: string;
+  }): { settlement: MealSettlement; expense?: Expense } {
+    const data = this.getData();
+    const monthStr = String(params.month).padStart(2, '0');
+    const prefix = `${params.year}-${monthStr}`;
+
+    const list: MealEntry[] = data.mealEntries || [];
+    const unsettledEaten = list.filter(
+      (e: MealEntry) => e.date.startsWith(prefix) && e.status === 'eaten' && !e.is_settled
+    );
+
+    const totalAmount = unsettledEaten.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const totalMeals = unsettledEaten.length;
+
+    const settlementId = `settle-${params.year}-${monthStr}-${Date.now()}`;
+    let createdExpense: Expense | undefined = undefined;
+
+    if (params.createExpense !== false && totalAmount > 0) {
+      createdExpense = this.addExpense({
+        user_id: 'user-default-1',
+        category_id: 'cat-mess-food',
+        amount: totalAmount,
+        description: `Mess Food Bill - ${getMonthName(params.month)} ${params.year} (${totalMeals} meals)`,
+        payment_method: params.paymentMethod,
+        expense_date: params.paymentDate,
+        notes: params.notes || `Consolidated monthly food bill settlement (${totalMeals} meals)`,
+        receipt_url: null,
+      });
+    }
+
+    const newSettlement: MealSettlement = {
+      id: settlementId,
+      user_id: 'user-default-1',
+      month: params.month,
+      year: params.year,
+      total_meals: totalMeals,
+      total_amount: totalAmount,
+      payment_method: params.paymentMethod,
+      payment_date: params.paymentDate,
+      expense_id: createdExpense ? createdExpense.id : null,
+      notes: params.notes || null,
+      created_at: new Date().toISOString(),
+    };
+
+    // Mark entries as settled
+    for (const e of list) {
+      if (e.date.startsWith(prefix) && !e.is_settled) {
+        e.is_settled = true;
+        e.settlement_id = settlementId;
+        e.updated_at = new Date().toISOString();
+      }
+    }
+
+    data.mealEntries = list;
+    data.mealSettlements = [...(data.mealSettlements || []), newSettlement];
+    this.saveData(data);
+
+    return { settlement: newSettlement, expense: createdExpense };
+  }
+
+  static getMonthlyMealSummary(month: number, year: number): MonthlyMealSummary {
+    const data = this.getData();
+    const monthStr = String(month).padStart(2, '0');
+    const prefix = `${year}-${monthStr}`;
+
+    const entries: MealEntry[] = (data.mealEntries || []).filter((e: MealEntry) =>
+      e.date.startsWith(prefix)
+    );
+
+    const typeOrder: Record<MealType, number> = { breakfast: 1, lunch: 2, dinner: 3, custom: 4 };
+    entries.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (typeOrder[a.meal_type] || 5) - (typeOrder[b.meal_type] || 5);
+    });
+
+    const eatenEntries = entries.filter((e) => e.status === 'eaten');
+    const totalAmountSpent = eatenEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const unpaidEntries = eatenEntries.filter((e) => !e.is_settled);
+    const totalUnpaidDues = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const settlements: MealSettlement[] = data.mealSettlements || [];
+    const settlement = settlements.find((s) => s.month === month && s.year === year) || null;
+    const isSettled = settlement !== null || (entries.length > 0 && unpaidEntries.length === 0);
+
+    return {
+      month,
+      year,
+      totalAmountSpent,
+      totalUnpaidDues,
+      totalMealsEaten: eatenEntries.length,
+      totalMealsSkipped: entries.filter((e) => e.status === 'skipped').length,
+      breakfastCount: eatenEntries.filter((e) => e.meal_type === 'breakfast').length,
+      lunchCount: eatenEntries.filter((e) => e.meal_type === 'lunch').length,
+      dinnerCount: eatenEntries.filter((e) => e.meal_type === 'dinner').length,
+      customCount: eatenEntries.filter((e) => e.meal_type === 'custom').length,
+      isSettled,
+      settlement,
+      entries,
+    };
   }
 
   static resetToSeed() {

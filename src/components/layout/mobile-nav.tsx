@@ -19,6 +19,7 @@ import {
   X,
   LogOut,
   Sparkles,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
@@ -65,6 +66,7 @@ export function MobileNav({
   const isExpensesActive = pathname.startsWith('/expenses');
   const isSavingsActive = pathname.startsWith('/savings');
   const isMoreActive =
+    pathname.startsWith('/meals') ||
     pathname.startsWith('/income') ||
     pathname.startsWith('/budgets') ||
     pathname.startsWith('/reports') ||
@@ -74,6 +76,7 @@ export function MobileNav({
   const isDark = mounted ? (resolvedTheme === 'dark' || theme === 'dark') : true;
 
   const moreNavLinks = [
+    { label: 'Meal Tracker', href: '/meals', icon: UtensilsCrossed, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/50' },
     { label: 'Income', href: '/income', icon: ArrowUpCircle, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50' },
     { label: 'Budgets', href: '/budgets', icon: PieChart, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/50' },
     { label: 'Categories', href: '/categories', icon: Tags, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/50' },

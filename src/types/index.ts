@@ -208,3 +208,51 @@ export interface FinancialInsight {
   title: string;
   message: string;
 }
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'custom';
+export type MealStatus = 'eaten' | 'skipped';
+
+export interface MealEntry {
+  id: string;
+  user_id: string;
+  date: string; // YYYY-MM-DD
+  meal_type: MealType;
+  name: string; // e.g. "Morning", "Afternoon", "Night", "Special Sweet"
+  amount: number;
+  status: MealStatus;
+  notes?: string | null;
+  is_settled: boolean;
+  settlement_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MealSettlement {
+  id: string;
+  user_id: string;
+  month: number; // 1-12
+  year: number;
+  total_meals: number;
+  total_amount: number;
+  payment_method: PaymentMethod;
+  payment_date: string; // YYYY-MM-DD
+  expense_id?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface MonthlyMealSummary {
+  month: number;
+  year: number;
+  totalAmountSpent: number;
+  totalUnpaidDues: number;
+  totalMealsEaten: number;
+  totalMealsSkipped: number;
+  breakfastCount: number;
+  lunchCount: number;
+  dinnerCount: number;
+  customCount: number;
+  isSettled: boolean;
+  settlement?: MealSettlement | null;
+  entries: MealEntry[];
+}

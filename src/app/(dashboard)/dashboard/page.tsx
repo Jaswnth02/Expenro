@@ -12,6 +12,7 @@ import { SavingsPreviewCard } from '@/components/dashboard/savings-preview-card'
 import { HealthScoreCard } from '@/components/dashboard/health-score-card';
 import { InsightsCard } from '@/components/dashboard/insights-card';
 import { DueRegularExpensesCard } from '@/components/dashboard/due-regular-expenses-card';
+import { MealDuesWidget } from '@/components/dashboard/meal-dues-widget';
 import { LocalFinanceStore } from '@/lib/data-service';
 import { SupabaseFinanceService } from '@/lib/supabase/data-service';
 import {
@@ -104,7 +105,7 @@ export default function DashboardPage({
   // Excluded categories sum for current month
   const excludedSum = useMemo(() => {
     return expenses.reduce((sum, e) => {
-      if (isExcluded(e.category?.name)) {
+      if (isExcluded(e)) {
         return sum + Number(e.amount || 0);
       }
       return sum;
@@ -119,7 +120,7 @@ export default function DashboardPage({
         ? summary.availableBalance
         : Math.max(0, summary.totalIncome - adjExpenses);
     const threshold = summary.lowBalanceThreshold ?? 1000;
-    const isLow = available <= threshold;
+    const isLow = available < threshold;
     const adjSavingsRate =
       summary.totalIncome > 0
         ? Math.max(0, Math.round(((summary.totalIncome - adjExpenses) / summary.totalIncome) * 100))
@@ -216,6 +217,9 @@ export default function DashboardPage({
         selectedYear={selectedYear}
         onOpenSetBalance={() => setIsSetBalanceOpen(true)}
       />
+
+      {/* Monthly Mess & Food Dues Widget */}
+      <MealDuesWidget refreshKey={refreshKey} />
 
       {/* Ready to Fill: Regular Expenses Due Today (After Scheduled Time) */}
       <DueRegularExpensesCard
