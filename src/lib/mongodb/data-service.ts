@@ -66,6 +66,7 @@ import {
   getMonthlyMealSummaryAction,
 } from '@/lib/actions/meals';
 import { updateUserProfileAction, getCurrentUserProfileAction } from '@/lib/actions/auth';
+import { getDashboardDataAction, DashboardBootstrapData } from '@/lib/actions/dashboard';
 
 function isMongoConfigured(): boolean {
   return true;
@@ -748,12 +749,49 @@ export const FinanceService = {
     }
   },
 
+  async getDashboardData(month: number, year: number): Promise<DashboardBootstrapData> {
+    try {
+      const res = await getDashboardDataAction(month, year);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[FinanceService] getDashboardDataAction error, falling back:', err);
+    }
+
+    // Fallback: query individually
+    const [summary, expenses, incomes, savingsGoals, budgets, categories] =
+      await Promise.all([
+        this.getFinancialSummary(month, year),
+        this.getExpenses(month, year),
+        this.getIncomes(month, year),
+        this.getSavingsGoals(),
+        this.getBudgets(month, year),
+        this.getCategories(),
+      ]);
+
+    return {
+      summary,
+      expenses,
+      incomes,
+      savingsGoals,
+      budgets,
+      categories,
+    };
+  },
+
   async getFinancialSummary(month: number, year: number): Promise<FinancialSummary> {
     if (!isMongoConfigured()) {
       return LocalFinanceStore.getFinancialSummary(month, year);
     }
 
     try {
+      // Use the fast single-trip action
+      const res = await getDashboardDataAction(month, year);
+      if (res.success && res.data?.summary) {
+        return res.data.summary;
+      }
+
       const [allIncomes, allExpenses, goals] = await Promise.all([
         this.getIncomes(),
         this.getExpenses(),

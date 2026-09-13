@@ -73,22 +73,14 @@ export default function DashboardPage({
     setIsLoading(true);
 
     try {
-      const [dbSummary, activeExpenses, activeIncomes, activeGoals, activeBudgets, activeCategories] =
-        await Promise.all([
-          FinanceService.getFinancialSummary(selectedMonth, selectedYear),
-          FinanceService.getExpenses(selectedMonth, selectedYear),
-          FinanceService.getIncomes(selectedMonth, selectedYear),
-          FinanceService.getSavingsGoals(),
-          FinanceService.getBudgets(selectedMonth, selectedYear),
-          FinanceService.getCategories(),
-        ]);
+      const data = await FinanceService.getDashboardData(selectedMonth, selectedYear);
 
-      setSummary(dbSummary);
-      setExpenses(activeExpenses);
-      setIncomes(activeIncomes);
-      setSavingsGoals(activeGoals);
-      setBudgets(activeBudgets);
-      setCategories(activeCategories);
+      setSummary(data.summary);
+      setExpenses(data.expenses);
+      setIncomes(data.incomes);
+      setSavingsGoals(data.savingsGoals);
+      setBudgets(data.budgets);
+      setCategories(data.categories);
     } finally {
       setIsLoading(false);
     }

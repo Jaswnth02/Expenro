@@ -86,6 +86,8 @@ const ExpenseSchema = new Schema<IExpense>(
   { timestamps: true }
 );
 
+ExpenseSchema.index({ userId: 1, expenseDate: -1 });
+
 export const ExpenseModel: Model<IExpense> =
   mongoose.models.Expense || mongoose.model<IExpense>('Expense', ExpenseSchema);
 
@@ -114,6 +116,8 @@ const IncomeSchema = new Schema<IIncome>(
   },
   { timestamps: true }
 );
+
+IncomeSchema.index({ userId: 1, incomeDate: -1 });
 
 export const IncomeModel: Model<IIncome> =
   mongoose.models.Income || mongoose.model<IIncome>('Income', IncomeSchema);
@@ -280,6 +284,8 @@ const MealEntrySchema = new Schema<IMealEntry>(
   { timestamps: true }
 );
 
+MealEntrySchema.index({ userId: 1, date: -1, mealType: 1 });
+
 export const MealEntryModel: Model<IMealEntry> =
   mongoose.models.MealEntry || mongoose.model<IMealEntry>('MealEntry', MealEntrySchema);
 
@@ -314,6 +320,8 @@ const MealSettlementSchema = new Schema<IMealSettlement>(
   },
   { timestamps: true }
 );
+
+MealSettlementSchema.index({ userId: 1, year: -1, month: -1 });
 
 export const MealSettlementModel: Model<IMealSettlement> =
   mongoose.models.MealSettlement ||

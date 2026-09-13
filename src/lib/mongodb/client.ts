@@ -25,20 +25,21 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
     return null;
   }
 
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
-  if (!cached.promise) {
+  if (!cached.promise || mongoose.connection.readyState === 0) {
     const uri = process.env.MONGODB_URI!;
-    const opts = {
+    const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: 10,
+      socketTimeoutMS: 30000,
       dbName: 'expenro',
     };
 
     cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
-      console.log('[MongoDB] Connected successfully to database:', mongooseInstance.connection.name);
       return mongooseInstance;
     });
   }
@@ -47,6 +48,7 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
+    cached.conn = null;
     console.error('Failed to connect to MongoDB:', e);
     return null;
   }
