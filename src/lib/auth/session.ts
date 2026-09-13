@@ -44,7 +44,7 @@ export async function setSessionCookie(token: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     sameSite: 'lax',
     path: '/',
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -69,4 +69,36 @@ export async function clearSessionCookie(): Promise<void> {
   cookieStore.delete(COOKIE_NAME);
 }
 
+/**
+ * Resolves the active user ID for server actions:
+ * 1. Checks current HTTP session cookie
+ * 2. If an explicit valid 24-character ObjectId is passed, uses it
+ * 3. Fallback: finds the primary user in MongoDB
+ */
+export async function getEffectiveUserId(explicitUserId?: string | null): Promise<string | null> {
+  const session = await getSessionUser();
+  if (session?.userId) return session.userId;
+
+  if (
+    explicitUserId &&
+    explicitUserId.length === 24 &&
+    /^[0-9a-fA-F]{24}$/.test(explicitUserId)
+  ) {
+    return explicitUserId;
+  }
+
+  try {
+    const { connectToDatabase } = await import('@/lib/mongodb/client');
+    const { UserModel } = await import('@/lib/mongodb/models');
+    await connectToDatabase();
+    const primaryUser = await UserModel.findOne().sort({ createdAt: 1 }).lean();
+    if (primaryUser) return primaryUser._id.toString();
+  } catch (err) {
+    console.error('[Auth] getEffectiveUserId fallback error:', err);
+  }
+
+  return null;
+}
+
 export { COOKIE_NAME };
+

@@ -103,15 +103,15 @@ export function MonthlyMealCalendar({
   }, [daysInMonth, filterMode]);
 
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+    <div className="w-full flex flex-col gap-3">
       {/* Table Header & Controls */}
-      <div className="p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
         <div>
           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
             Daily Food Log & History ({getMonthName(selectedMonth)} {selectedYear})
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Individual meal records, daily subtotals, and skipped day audits
+            Individual meal records and daily subtotals
           </p>
         </div>
 
@@ -144,7 +144,7 @@ export function MonthlyMealCalendar({
             className={cn(
               'px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer',
               filterMode === 'skipped'
-                ? 'bg-white dark:bg-zinc-700 text-rose-600 dark:text-rose-400 shadow-xs font-semibold'
+                ? 'bg-white dark:bg-zinc-700 text-amber-600 dark:text-amber-400 shadow-xs font-semibold'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
             )}
           >
@@ -153,10 +153,10 @@ export function MonthlyMealCalendar({
         </div>
       </div>
 
-      {/* Days Feed */}
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-[580px] overflow-y-auto">
+      {/* Days Feed: Individual card box for each day */}
+      <div className="flex flex-col gap-2.5">
         {filteredDays.length === 0 ? (
-          <div className="p-8 text-center text-zinc-400 text-xs">
+          <div className="p-8 text-center text-zinc-400 text-xs rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             No entries match the selected filter.
           </div>
         ) : (
@@ -167,10 +167,10 @@ export function MonthlyMealCalendar({
               <div
                 key={day.dateStr}
                 className={cn(
-                  'p-3.5 sm:p-4 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3',
+                  'rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 sm:p-3.5 shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3',
                   hasEntries
-                    ? 'hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40'
-                    : 'opacity-60 hover:opacity-100 hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20'
+                    ? 'hover:border-zinc-300 dark:hover:border-zinc-700'
+                    : 'opacity-60 hover:opacity-100'
                 )}
               >
                 {/* Date & Day Indicator */}
@@ -178,8 +178,10 @@ export function MonthlyMealCalendar({
                   <div
                     className={cn(
                       'w-10 h-10 rounded-xl flex flex-col items-center justify-center font-bold shrink-0 border text-xs',
-                      hasEntries
+                      day.eatenCount > 0
                         ? 'border-emerald-500/20 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        : day.skippedCount > 0
+                        ? 'border-amber-500/20 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                         : 'border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
                     )}
                   >
@@ -196,14 +198,18 @@ export function MonthlyMealCalendar({
                       {formatDate(day.dateStr)}
                     </span>
                     <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      {hasEntries
+                      {day.entries.length === 0
+                        ? 'No meals logged'
+                        : day.eatenCount > 0 && day.skippedCount > 0
                         ? `${day.eatenCount} eaten, ${day.skippedCount} skipped`
-                        : 'No meals logged'}
+                        : day.eatenCount > 0
+                        ? `${day.eatenCount} ${day.eatenCount === 1 ? 'meal' : 'meals'}`
+                        : `${day.skippedCount} skipped`}
                     </span>
                   </div>
                 </div>
 
-                {/* Meals Taken Chips */}
+                {/* Meals Taken & Skipped Chips */}
                 <div className="flex-1 flex flex-wrap items-center gap-2">
                   {hasEntries ? (
                     day.entries.map((meal) => {
@@ -218,14 +224,22 @@ export function MonthlyMealCalendar({
                             'group relative flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs border transition-all',
                             isEaten
                               ? badgeStyle
-                              : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400 line-through'
+                              : 'bg-zinc-100/90 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700/60 text-zinc-500 dark:text-zinc-400'
                           )}
                         >
-                          <Icon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="font-semibold">{meal.name}</span>
-                          <span className="font-bold ml-1">
-                            {isEaten ? formatCurrency(meal.amount) : 'Skipped'}
+                          <Icon className={cn('w-3.5 h-3.5 shrink-0', isEaten ? '' : 'text-zinc-400')} />
+                          <span className={cn('font-semibold', isEaten ? '' : 'text-zinc-700 dark:text-zinc-300')}>
+                            {meal.name}
                           </span>
+                          {isEaten ? (
+                            <span className="font-bold ml-1">
+                              {formatCurrency(meal.amount)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-200/80 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 ml-1">
+                              Skipped
+                            </span>
+                          )}
 
                           {/* Quick delete button on hover */}
                           <button

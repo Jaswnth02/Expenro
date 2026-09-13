@@ -40,7 +40,7 @@ export function CategoryBreakdownCard({
   const categoryList = Array.from(categoryMap.values()).sort((a, b) => b.amount - a.amount);
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 shadow-xs flex flex-col justify-between">
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-3.5 sm:p-5 shadow-xs flex flex-col justify-between w-full max-w-full min-w-0 overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -106,7 +106,10 @@ export function CategoryBreakdownCard({
       )}
 
       {excludedCategories.length > 0 && (
-        <div className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between">
+        <div
+          suppressHydrationWarning
+          className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between"
+        >
           <span>Excluded from total:</span>
           <span className="font-medium text-amber-600 dark:text-amber-400 truncate max-w-[180px]">
             {excludedCategories.join(', ')}

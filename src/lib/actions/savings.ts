@@ -1,8 +1,8 @@
 'use server';
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
-import { SavingsGoalModel, SavingsTransactionModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { SavingsGoalModel, SavingsTransactionModel } from '@/lib/mongodb/models';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { SavingsGoal, SavingsTransaction } from '@/types';
 
 interface ActionResponse<T = unknown> {
@@ -16,14 +16,6 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function resolveUserId(): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-  return null;
-}
-
 export async function getSavingsGoalsAction(): Promise<ActionResponse<SavingsGoal[]>> {
   try {
     if (!isMongoConfigured()) {
@@ -31,7 +23,7 @@ export async function getSavingsGoalsAction(): Promise<ActionResponse<SavingsGoa
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
@@ -49,7 +41,7 @@ export async function getSavingsGoalsAction(): Promise<ActionResponse<SavingsGoa
       const id = g._id.toString();
       const targetAmount = Number(g.targetAmount);
       const savedAmount = savedAmountMap.get(id) || 0;
-      const progressPercentage = targetAmount > 0 ? Math.min(100, (savedAmount / targetAmount) * 100) : 0;
+      const progressPercentage = targetAmount > 0 ? Math.round(Math.min(100, (savedAmount / targetAmount) * 100)) : 0;
 
       return {
         id,
@@ -90,7 +82,7 @@ export async function addSavingsGoalAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -214,7 +206,7 @@ export async function addSavingsTransactionAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -254,6 +246,44 @@ export async function deleteSavingsTransactionAction(id: string): Promise<Action
     await connectToDatabase();
     await SavingsTransactionModel.findByIdAndDelete(id);
     return { success: true, data: true };
+  } catch (err) {
+    return { success: false, error: getErrorMessage(err) };
+  }
+}
+
+export async function getSavingsTransactionsAction(goalId?: string): Promise<ActionResponse<SavingsTransaction[]>> {
+  try {
+    if (!isMongoConfigured()) {
+      return { success: true, data: [] };
+    }
+
+    await connectToDatabase();
+    const userId = await getEffectiveUserId();
+    if (!userId) {
+      return { success: true, data: [] };
+    }
+
+    const query: any = { userId };
+    if (goalId) {
+      query.goalId = goalId;
+    }
+
+    const docs = await SavingsTransactionModel.find(query)
+      .sort({ transactionDate: -1, createdAt: -1 })
+      .lean();
+
+    const data: SavingsTransaction[] = docs.map((d: any) => ({
+      id: d._id.toString(),
+      user_id: d.userId,
+      goal_id: d.goalId,
+      amount: Number(d.amount),
+      transaction_date: d.transactionDate,
+      note: d.note,
+      created_at: new Date(d.createdAt).toISOString(),
+      updated_at: new Date(d.updatedAt).toISOString(),
+    }));
+
+    return { success: true, data };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
   }

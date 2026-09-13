@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RegularExpense, Category } from '@/types';
 import { FinanceService } from '@/lib/mongodb/data-service';
-import { LocalFinanceStore } from '@/lib/data-service';
 import { useAuth } from '@/context/auth-context';
 import { RegularExpenseItem } from './regular-expense-item';
 import { RegularExpenseForm } from './regular-expense-form';
@@ -56,11 +55,8 @@ export function RegularExpenseList() {
       setRegularExpenses(list);
       setIsEnabled(enabled);
       setCategories(cats.filter((c) => c.type === 'expense'));
-    } catch {
-      // Fallback
-      setRegularExpenses(LocalFinanceStore.getRegularExpenses());
-      setIsEnabled(LocalFinanceStore.getRegularExpensesSettings());
-      setCategories(LocalFinanceStore.getCategories().filter((c) => c.type === 'expense'));
+    } catch (err) {
+      console.error('Failed to load regular expenses from MongoDB:', err);
     } finally {
       setIsLoading(false);
     }

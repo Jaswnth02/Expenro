@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { AlertTriangle, Plus } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { SummaryCards } from '@/components/dashboard/summary-cards';
 import { SetBalanceModal } from '@/components/dashboard/set-balance-modal';
@@ -20,6 +18,7 @@ import {
 } from '@/lib/calculations/finance';
 import { formatCurrency } from '@/lib/utils';
 import { useExcludedCategories } from '@/lib/exclusions';
+import { useMonth } from '@/context/month-context';
 import {
   Expense,
   Income,
@@ -40,13 +39,7 @@ export default function DashboardPage({
   refreshKey = 0,
   onOpenQuickAdd,
 }: DashboardPageProps) {
-  // Selected month and year (Defaults to active calendar month so every month on day 1 it automatically resets to 0)
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
-  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
-  const [selectedYear, setSelectedYear] = useState(() => currentYear);
+  const { selectedMonth, selectedYear, setMonth } = useMonth();
 
   const [summary, setSummary] = useState<FinancialSummary>({
     totalIncome: 0,
@@ -54,8 +47,8 @@ export default function DashboardPage({
     totalSavings: 0,
     remainingBalance: 0,
     savingsRate: 0,
-    month: currentMonth,
-    year: currentYear,
+    month: selectedMonth,
+    year: selectedYear,
   });
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -158,12 +151,11 @@ export default function DashboardPage({
   }, [activeSummary, includedExpenses, incomes, budgets, savingsGoals]);
 
   const handleMonthChange = (month: number, year: number) => {
-    setSelectedMonth(month);
-    setSelectedYear(year);
+    setMonth(month, year);
   };
 
   return (
-    <div className="flex flex-col gap-3.5 sm:gap-5">
+    <div className="flex flex-col gap-3.5 sm:gap-5 w-full max-w-full min-w-0 overflow-x-hidden">
       {/* Top Header with Greeting and Month Selector */}
       <Header
         selectedMonth={selectedMonth}
@@ -171,45 +163,6 @@ export default function DashboardPage({
         onMonthChange={handleMonthChange}
         userName="Alex"
       />
-
-      {/* Low Balance Replenishment Banner */}
-      {activeSummary.isLowBalance && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 text-amber-950 dark:text-amber-100 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 border border-amber-300/40">
-              <AlertTriangle className="w-4 h-4 stroke-[2.5]" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                <span>Low Balance Warning</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200">
-                  {formatCurrency(activeSummary.availableBalance ?? 0)} left
-                </span>
-              </div>
-              <p className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-300/90 mt-0.5 truncate">
-                Balance is below your ₹{(activeSummary.lowBalanceThreshold ?? 1000).toLocaleString('en-IN')} safety buffer. When funds arrive, log them here to replenish.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
-            <button
-              type="button"
-              onClick={() => setIsSetBalanceOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-white/90 dark:bg-zinc-900/90 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 text-amber-900 dark:text-amber-100 font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
-            >
-              <span>⚙️ Set Real Balance</span>
-            </button>
-            <Link
-              href="/income"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Log Sent Money</span>
-            </Link>
-          </div>
-        </div>
-      )}
 
       {/* Primary Financial Summary Cards (Total Expenses, Remaining Balance, Selected Category) */}
       <SummaryCards

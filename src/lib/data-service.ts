@@ -567,38 +567,19 @@ export class LocalFinanceStore {
           }
         }
       }
-      if (parsed && Array.isArray(parsed.incomes)) {
-        const allExp = (parsed.expenses || []).reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
-        const allSav = (parsed.savingsTransactions || []).reduce((s: number, st: any) => s + Number(st.amount || 0), 0);
-        const openingIdx = parsed.incomes.findIndex(
-          (i: any) => i.source?.toLowerCase() === 'opening balance' || i.description?.toLowerCase() === 'opening balance'
-        );
-        const otherInc = parsed.incomes
-          .filter((_: any, idx: number) => idx !== openingIdx)
-          .reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
-        const currentAvail = Number((otherInc + (openingIdx !== -1 ? Number(parsed.incomes[openingIdx].amount || 0) : 0) - allExp - allSav).toFixed(2));
-
-        if (currentAvail !== 1000 || openingIdx === -1) {
-          const reqOpening = Math.max(0.01, Number((1000 + allExp + allSav - otherInc).toFixed(2)));
-          if (openingIdx !== -1) {
-            parsed.incomes[openingIdx].amount = reqOpening;
-            parsed.incomes[openingIdx].notes = 'Calibrated to set current available balance to ₹1,000';
-            parsed.incomes[openingIdx].updated_at = new Date().toISOString();
-          } else {
-            parsed.incomes.push({
-              id: 'inc-open-calibrated',
-              user_id: 'user-default-1',
-              source: 'Opening Balance',
-              amount: reqOpening,
-              description: 'Starting wallet balance calibration',
-              income_date: '2026-06-01',
-              notes: 'Calibrated to set current available balance to ₹1,000',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-          }
-          changed = true;
-        }
+      if (parsed && Array.isArray(parsed.incomes) && parsed.incomes.length === 0) {
+        parsed.incomes.push({
+          id: 'inc-open-initial',
+          user_id: 'user-default-1',
+          source: 'Opening Balance',
+          amount: 1000,
+          description: 'Initial wallet balance',
+          income_date: '2026-06-01',
+          notes: 'Initial starting wallet balance',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        changed = true;
       }
       if (changed) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));

@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { FinanceService } from '@/lib/mongodb/data-service';
-import { LocalFinanceStore } from '@/lib/data-service';
 import { SavingsGoal, SavingsTransaction } from '@/types';
 import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
 import { Plus, PiggyBank, Target, Trash2, X } from 'lucide-react';
+import { useContextualAdd } from '@/context/contextual-add-context';
 
 export default function SavingsPage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -27,23 +27,59 @@ export default function SavingsPage() {
   const [depositDate, setDepositDate] = useState(getTodayDateString());
   const [depositNote, setDepositNote] = useState('');
 
+  const { registerAddHandler } = useContextualAdd();
+
+  // In-memory Contextual Add: when bottom mobile "+" button is tapped on /savings, open deposit modal
+  useEffect(() => {
+    const unregister = registerAddHandler('savings', () => {
+      if (goals.length === 0) {
+        setIsGoalModalOpen(true);
+      } else {
+        if (!selectedGoalId && goals.length > 0) {
+          setSelectedGoalId(goals[0].id);
+        }
+        setDepositAmount('');
+        setDepositNote('');
+        setDepositDate(getTodayDateString());
+        setIsDepositModalOpen(true);
+      }
+    });
+
+    // Window event backup
+    const handleWindowEvent = () => {
+      if (goals.length === 0) {
+        setIsGoalModalOpen(true);
+      } else {
+        if (!selectedGoalId && goals.length > 0) {
+          setSelectedGoalId(goals[0].id);
+        }
+        setDepositAmount('');
+        setDepositNote('');
+        setDepositDate(getTodayDateString());
+        setIsDepositModalOpen(true);
+      }
+    };
+    window.addEventListener('expenro:trigger-add', handleWindowEvent);
+
+    return () => {
+      unregister();
+      window.removeEventListener('expenro:trigger-add', handleWindowEvent);
+    };
+  }, [goals, selectedGoalId, registerAddHandler]);
+
   const loadSavingsData = async () => {
     try {
-      const gList = await FinanceService.getSavingsGoals();
-      const tList = LocalFinanceStore.getSavingsTransactions();
+      const [gList, tList] = await Promise.all([
+        FinanceService.getSavingsGoals(),
+        FinanceService.getSavingsTransactions(),
+      ]);
       setGoals(gList);
       setTransactions(tList);
       if (gList.length > 0 && !selectedGoalId) {
         setSelectedGoalId(gList[0].id);
       }
-    } catch {
-      const gList = LocalFinanceStore.getSavingsGoals();
-      const tList = LocalFinanceStore.getSavingsTransactions();
-      setGoals(gList);
-      setTransactions(tList);
-      if (gList.length > 0 && !selectedGoalId) {
-        setSelectedGoalId(gList[0].id);
-      }
+    } catch (err) {
+      console.error('Failed to load savings data:', err);
     }
   };
 
@@ -156,7 +192,7 @@ export default function SavingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
           {goals.map((goal) => {
             const saved = goal.saved_amount ?? 0;
-            const progress = goal.progress_percentage ?? 0;
+            const progress = Math.round(goal.progress_percentage ?? 0);
             const remaining = Math.max(0, goal.target_amount - saved);
 
             return (

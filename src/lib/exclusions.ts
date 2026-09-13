@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSyncExternalStore, useCallback, useMemo } from 'react';
 
 export const EXCLUDED_CATEGORIES_STORAGE_KEY_PREFIX = 'expenro_excluded_categories_';
 export const LEGACY_EXCLUDED_CATEGORIES_KEY = 'expenro_excluded_categories_from_total';
 export const EXCLUSIONS_CHANGED_EVENT = 'expenro:exclusions-changed';
+
+const emptyArray: string[] = [];
+// Stable snapshot cache to ensure referential equality for useSyncExternalStore
+const snapshotCache = new Map<string, { raw: string | null; data: string[] }>();
 
 /**
  * Normalizes a month/year combination or string into a standardized YYYY-MM key.
@@ -27,14 +31,21 @@ export function normalizeMonthKey(monthOrKey?: number | string, year?: number): 
  * ensuring categories are included by default in their respective months.
  */
 export function getExcludedCategories(monthOrKey?: number | string, year?: number): string[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return emptyArray;
   const monthKey = normalizeMonthKey(monthOrKey, year);
   try {
     const storageKey = `${EXCLUDED_CATEGORIES_STORAGE_KEY_PREFIX}${monthKey}`;
     const raw = localStorage.getItem(storageKey);
+    const cached = snapshotCache.get(monthKey);
+    if (cached && cached.raw === raw) {
+      return cached.data;
+    }
+
     if (raw) {
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      const data = Array.isArray(parsed) ? parsed : emptyArray;
+      snapshotCache.set(monthKey, { raw, data });
+      return data;
     }
 
     // Seamless migration: If current month (2026-09) has no scoped entry yet,
@@ -46,15 +57,24 @@ export function getExcludedCategories(monthOrKey?: number | string, year?: numbe
         if (Array.isArray(parsed) && parsed.length > 0) {
           localStorage.setItem(storageKey, legacyRaw);
           localStorage.removeItem(LEGACY_EXCLUDED_CATEGORIES_KEY);
+          snapshotCache.set(monthKey, { raw: legacyRaw, data: parsed });
           return parsed;
         }
       }
     }
 
-    // Default for any new or other month: no exclusions (everything included)
-    return [];
+    // Default for September 2026: Exclude Mess Food by default so meal dues stay in the meal tracker
+    if (monthKey === '2026-09') {
+      const defaultSept = ['Mess Food'];
+      snapshotCache.set(monthKey, { raw: null, data: defaultSept });
+      return defaultSept;
+    }
+
+    // Default for other months: no exclusions
+    snapshotCache.set(monthKey, { raw: null, data: emptyArray });
+    return emptyArray;
   } catch {
-    return [];
+    return emptyArray;
   }
 }
 
@@ -71,7 +91,9 @@ export function setExcludedCategories(
   const monthKey = normalizeMonthKey(monthOrKey, year);
   try {
     const storageKey = `${EXCLUDED_CATEGORIES_STORAGE_KEY_PREFIX}${monthKey}`;
-    localStorage.setItem(storageKey, JSON.stringify(categories));
+    const raw = JSON.stringify(categories);
+    localStorage.setItem(storageKey, raw);
+    snapshotCache.set(monthKey, { raw, data: categories });
     window.dispatchEvent(
       new CustomEvent(EXCLUSIONS_CHANGED_EVENT, {
         detail: { monthKey, categories },
@@ -126,7 +148,7 @@ export function isExpenseExcluded<
   const desc = (expense.description || '').toLowerCase();
   const notes = (expense.notes || '').toLowerCase();
   const isSettledPayment =
-    (expense as any).is_settled === true ||
+    (expense as { is_settled?: boolean }).is_settled === true ||
     desc.startsWith('mess food bill') ||
     desc.includes('food bill settlement') ||
     desc.includes('meal bill settlement') ||
@@ -199,57 +221,65 @@ export function calculateExcludedSum<
 
 /**
  * React hook providing reactive access to month-scoped excluded categories.
- * Whenever month changes or a new month starts, categories default to included.
+ * Uses useSyncExternalStore for hydration-safe server and client synchronization.
  */
 export function useExcludedCategories(monthOrKey?: number | string, year?: number) {
   const monthKey = normalizeMonthKey(monthOrKey, year);
-  const [excludedCategories, setExcludedCategoriesState] = useState<string[]>(() =>
-    getExcludedCategories(monthKey)
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const handleCustomEvent = (event: Event) => {
+        const customEvent = event as CustomEvent<{ monthKey?: string; categories?: string[] } | string[]>;
+        if ('detail' in customEvent && customEvent.detail) {
+          if (Array.isArray(customEvent.detail)) {
+            snapshotCache.delete(monthKey);
+            onStoreChange();
+          } else if (typeof customEvent.detail === 'object' && customEvent.detail !== null) {
+            if (!customEvent.detail.monthKey || customEvent.detail.monthKey === monthKey) {
+              snapshotCache.delete(monthKey);
+              onStoreChange();
+            }
+          }
+        } else {
+          snapshotCache.delete(monthKey);
+          onStoreChange();
+        }
+      };
+
+      const handleStorageEvent = (event: StorageEvent) => {
+        if (
+          event.key === `${EXCLUDED_CATEGORIES_STORAGE_KEY_PREFIX}${monthKey}` ||
+          event.key === LEGACY_EXCLUDED_CATEGORIES_KEY
+        ) {
+          snapshotCache.delete(monthKey);
+          onStoreChange();
+        }
+      };
+
+      window.addEventListener(EXCLUSIONS_CHANGED_EVENT, handleCustomEvent);
+      window.addEventListener('storage', handleStorageEvent);
+
+      return () => {
+        window.removeEventListener(EXCLUSIONS_CHANGED_EVENT, handleCustomEvent);
+        window.removeEventListener('storage', handleStorageEvent);
+      };
+    },
+    [monthKey]
   );
 
-  const refresh = useCallback(() => {
-    setExcludedCategoriesState(getExcludedCategories(monthKey));
-  }, [monthKey]);
+  const getSnapshot = useCallback(() => getExcludedCategories(monthKey), [monthKey]);
+  const getServerSnapshot = useCallback(() => emptyArray, []);
 
-  useEffect(() => {
-    refresh();
-
-    const handleCustomEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<{ monthKey?: string; categories?: string[] } | string[]>;
-      if ('detail' in customEvent && customEvent.detail) {
-        if (Array.isArray(customEvent.detail)) {
-          // Legacy payload
-          refresh();
-        } else if (typeof customEvent.detail === 'object' && customEvent.detail !== null) {
-          if (!customEvent.detail.monthKey || customEvent.detail.monthKey === monthKey) {
-            refresh();
-          }
-        }
-      } else {
-        refresh();
-      }
-    };
-
-    const handleStorageEvent = (event: StorageEvent) => {
-      if (
-        event.key === `${EXCLUDED_CATEGORIES_STORAGE_KEY_PREFIX}${monthKey}` ||
-        event.key === LEGACY_EXCLUDED_CATEGORIES_KEY
-      ) {
-        refresh();
-      }
-    };
-
-    window.addEventListener(EXCLUSIONS_CHANGED_EVENT, handleCustomEvent);
-    window.addEventListener('storage', handleStorageEvent);
-
-    return () => {
-      window.removeEventListener(EXCLUSIONS_CHANGED_EVENT, handleCustomEvent);
-      window.removeEventListener('storage', handleStorageEvent);
-    };
-  }, [monthKey, refresh]);
+  const excludedCategories = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const isExcluded = useCallback(
-    (target: string | undefined | null | { category?: { name?: string } | null; description?: string; notes?: string | null }) => {
+    (
+      target:
+        | string
+        | undefined
+        | null
+        | { category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }
+    ) => {
       if (typeof target === 'object' && target !== null) {
         return isExpenseExcluded(target, excludedCategories, monthKey);
       }
@@ -266,7 +296,9 @@ export function useExcludedCategories(monthOrKey?: number | string, year?: numbe
   );
 
   const filterIncluded = useCallback(
-    <T extends { category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }>(expenses: T[]): T[] => {
+    <T extends { category?: { name?: string } | null; description?: string; notes?: string | null; is_settled?: boolean }>(
+      expenses: T[]
+    ): T[] => {
       return filterIncludedExpenses(expenses, excludedCategories, monthKey);
     },
     [excludedCategories, monthKey]
@@ -281,7 +313,9 @@ export function useExcludedCategories(monthOrKey?: number | string, year?: numbe
     excludedCategories,
     excludedNamesSet,
     isExcluded,
-    isExpenseExcluded: (exp: any) => isExpenseExcluded(exp, excludedCategories, monthKey),
+    isExpenseExcluded: (
+      exp: Parameters<typeof isExpenseExcluded>[0]
+    ) => isExpenseExcluded(exp, excludedCategories, monthKey),
     toggleExclusion,
     filterIncluded,
     hasExclusions: excludedCategories.length > 0,

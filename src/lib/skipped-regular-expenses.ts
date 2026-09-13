@@ -1,22 +1,35 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useSyncExternalStore, useCallback } from 'react';
 
 const STORAGE_PREFIX = 'expenro_skipped_regular_expenses_';
 const SKIPPED_EVENT = 'expenro:regular_expenses_skipped';
+
+const emptyArray: string[] = [];
+const snapshotCache = new Map<string, { raw: string | null; data: string[] }>();
 
 /**
  * Returns list of skipped regular expense IDs for a specific date (YYYY-MM-DD).
  */
 export function getSkippedRegularExpenseIds(dateStr: string): string[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return emptyArray;
   try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${dateStr}`);
-    if (!raw) return [];
+    const storageKey = `${STORAGE_PREFIX}${dateStr}`;
+    const raw = localStorage.getItem(storageKey);
+    const cached = snapshotCache.get(dateStr);
+    if (cached && cached.raw === raw) {
+      return cached.data;
+    }
+    if (!raw) {
+      snapshotCache.set(dateStr, { raw: null, data: emptyArray });
+      return emptyArray;
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const data = Array.isArray(parsed) ? parsed : emptyArray;
+    snapshotCache.set(dateStr, { raw, data });
+    return data;
   } catch {
-    return [];
+    return emptyArray;
   }
 }
 
@@ -29,7 +42,9 @@ export function skipRegularExpense(dateStr: string, id: string): void {
     const current = getSkippedRegularExpenseIds(dateStr);
     if (!current.includes(id)) {
       const updated = [...current, id];
-      localStorage.setItem(`${STORAGE_PREFIX}${dateStr}`, JSON.stringify(updated));
+      const raw = JSON.stringify(updated);
+      localStorage.setItem(`${STORAGE_PREFIX}${dateStr}`, raw);
+      snapshotCache.set(dateStr, { raw, data: updated });
       window.dispatchEvent(new CustomEvent(SKIPPED_EVENT, { detail: { date: dateStr, id, action: 'skip' } }));
     }
   } catch (err) {
@@ -45,7 +60,9 @@ export function unskipRegularExpense(dateStr: string, id: string): void {
   try {
     const current = getSkippedRegularExpenseIds(dateStr);
     const updated = current.filter((item) => item !== id);
-    localStorage.setItem(`${STORAGE_PREFIX}${dateStr}`, JSON.stringify(updated));
+    const raw = JSON.stringify(updated);
+    localStorage.setItem(`${STORAGE_PREFIX}${dateStr}`, raw);
+    snapshotCache.set(dateStr, { raw, data: updated });
     window.dispatchEvent(new CustomEvent(SKIPPED_EVENT, { detail: { date: dateStr, id, action: 'unskip' } }));
   } catch (err) {
     console.error('Failed to unskip regular expense:', err);
@@ -64,36 +81,38 @@ export function isRegularExpenseSkipped(dateStr: string, id: string): boolean {
  * React hook to reactively track skipped regular expenses for a given date.
  */
 export function useSkippedRegularExpenses(dateStr: string) {
-  const [skippedIds, setSkippedIds] = useState<string[]>(() => getSkippedRegularExpenseIds(dateStr));
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const handleCustomEvent = (e: Event) => {
+        const custom = e as CustomEvent;
+        if (!custom.detail?.date || custom.detail.date === dateStr) {
+          snapshotCache.delete(dateStr);
+          onStoreChange();
+        }
+      };
 
-  const refresh = useCallback(() => {
-    setSkippedIds(getSkippedRegularExpenseIds(dateStr));
-  }, [dateStr]);
+      const handleStorage = (e: StorageEvent) => {
+        if (e.key === `${STORAGE_PREFIX}${dateStr}`) {
+          snapshotCache.delete(dateStr);
+          onStoreChange();
+        }
+      };
 
-  useEffect(() => {
-    refresh();
+      window.addEventListener(SKIPPED_EVENT, handleCustomEvent);
+      window.addEventListener('storage', handleStorage);
 
-    const handleCustomEvent = (e: Event) => {
-      const custom = e as CustomEvent;
-      if (!custom.detail?.date || custom.detail.date === dateStr) {
-        refresh();
-      }
-    };
+      return () => {
+        window.removeEventListener(SKIPPED_EVENT, handleCustomEvent);
+        window.removeEventListener('storage', handleStorage);
+      };
+    },
+    [dateStr]
+  );
 
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === `${STORAGE_PREFIX}${dateStr}`) {
-        refresh();
-      }
-    };
+  const getSnapshot = useCallback(() => getSkippedRegularExpenseIds(dateStr), [dateStr]);
+  const getServerSnapshot = useCallback(() => emptyArray, []);
 
-    window.addEventListener(SKIPPED_EVENT, handleCustomEvent);
-    window.addEventListener('storage', handleStorage);
-
-    return () => {
-      window.removeEventListener(SKIPPED_EVENT, handleCustomEvent);
-      window.removeEventListener('storage', handleStorage);
-    };
-  }, [dateStr, refresh]);
+  const skippedIds = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const skip = useCallback(
     (id: string) => {

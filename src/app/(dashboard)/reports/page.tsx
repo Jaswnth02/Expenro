@@ -21,18 +21,15 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
   PieChart as PieIcon,
   BarChart3,
   Layers,
   Sparkles,
 } from 'lucide-react';
+import { useMonth } from '@/context/month-context';
 
 export default function ReportsPage() {
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const { selectedMonth, selectedYear } = useMonth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,33 +61,7 @@ export default function ReportsPage() {
   const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
   const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
 
-  const monthOptions = [
-    { month: 6, year: 2026, label: 'June 2026' },
-    { month: 7, year: 2026, label: 'July 2026' },
-    { month: 8, year: 2026, label: 'August 2026' },
-    { month: 9, year: 2026, label: 'September 2026' },
-    { month: 10, year: 2026, label: 'October 2026' },
-    { month: 11, year: 2026, label: 'November 2026' },
-    { month: 12, year: 2026, label: 'December 2026' },
-  ];
 
-  const handlePrevMonth = () => {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((m) => m - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((m) => m + 1);
-    }
-  };
 
   // Load real expenses and financial summaries for current and previous months
   const loadReportData = useCallback(async () => {
@@ -251,43 +222,6 @@ export default function ReportsPage() {
               </span>
             )}
           </p>
-        </div>
-
-        {/* Compact Month Navigator */}
-        <div className="flex items-center bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-lg p-0.5 shadow-2xs shrink-0">
-          <button
-            onClick={handlePrevMonth}
-            title="Previous Month"
-            className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <div className="relative flex items-center px-1">
-            <Calendar className="w-3 h-3 text-emerald-600 dark:text-emerald-400 mr-1 pointer-events-none shrink-0" />
-            <select
-              value={`${selectedMonth}-${selectedYear}`}
-              onChange={(e) => {
-                const [m, y] = e.target.value.split('-').map(Number);
-                setSelectedMonth(m);
-                setSelectedYear(y);
-              }}
-              aria-label="Select Report Month"
-              className="bg-transparent text-xs font-bold text-zinc-800 dark:text-zinc-200 focus:outline-none cursor-pointer pr-1 py-0.5"
-            >
-              {monthOptions.map((opt) => (
-                <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={handleNextMonth}
-            title="Next Month"
-            className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 

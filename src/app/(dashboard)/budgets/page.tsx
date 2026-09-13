@@ -1,24 +1,44 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { LocalFinanceStore } from '@/lib/data-service';
 import { FinanceService } from '@/lib/mongodb/data-service';
 import { Budget } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { Plus, PieChart, AlertTriangle, CheckCircle, ShieldAlert, X } from 'lucide-react';
+import { useContextualAdd } from '@/context/contextual-add-context';
+import { useMonth } from '@/context/month-context';
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { selectedMonth, selectedYear } = useMonth();
+
+  const { registerAddHandler } = useContextualAdd();
+
+  // Contextual Add listener: when bottom mobile "+" button is tapped on /budgets, open Set Budget modal
+  useEffect(() => {
+    const unregister = registerAddHandler('budgets', () => {
+      setAmount('');
+      setIsModalOpen(true);
+    });
+
+    const handleWindowEvent = () => {
+      setAmount('');
+      setIsModalOpen(true);
+    };
+    window.addEventListener('expenro:trigger-add', handleWindowEvent);
+
+    return () => {
+      unregister();
+      window.removeEventListener('expenro:trigger-add', handleWindowEvent);
+    };
+  }, [registerAddHandler]);
 
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
 
   const loadBudgets = async () => {
-    const list = await FinanceService.getBudgets(currentMonth, currentYear);
+    const list = await FinanceService.getBudgets(selectedMonth, selectedYear);
     setBudgets(list);
   };
 
@@ -26,6 +46,9 @@ export default function BudgetsPage() {
 
   useEffect(() => {
     loadBudgets();
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
     const init = async () => {
       const cats = await FinanceService.getCategories();
       const expenseCats = cats.filter((c) => c.type === 'expense');
@@ -42,7 +65,7 @@ export default function BudgetsPage() {
     const num = parseFloat(amount);
     if (isNaN(num) || num <= 0 || !categoryId) return;
 
-    await FinanceService.setBudget(categoryId, num, currentMonth, currentYear);
+    await FinanceService.setBudget(categoryId, num, selectedMonth, selectedYear);
 
     setAmount('');
     setIsModalOpen(false);

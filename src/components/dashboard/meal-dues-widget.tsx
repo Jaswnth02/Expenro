@@ -50,9 +50,9 @@ export function MealDuesWidget({ refreshKey = 0 }: MealDuesWidgetProps) {
   const hasDinner = todayEntries.some((e) => e.meal_type === 'dinner' && e.status === 'eaten');
 
   return (
-    <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 sm:p-3.5 shadow-xs transition-all hover:border-emerald-500/40">
+    <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 sm:p-3.5 shadow-xs transition-all hover:border-emerald-500/40 w-full max-w-full min-w-0 overflow-hidden">
       {/* Header Row: Icon + Title on left, Tracker Link on right */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 w-full min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
             <Utensils className="w-3.5 h-3.5" />
@@ -77,7 +77,7 @@ export function MealDuesWidget({ refreshKey = 0 }: MealDuesWidgetProps) {
       </div>
 
       {/* Content Row: Left side Dues & meals count, Right side Today's Meal Status */}
-      <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+      <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 w-full min-w-0">
         {/* Left: Current Unpaid Dues */}
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-base sm:text-lg font-extrabold text-zinc-900 dark:text-zinc-100 shrink-0">
@@ -89,7 +89,7 @@ export function MealDuesWidget({ refreshKey = 0 }: MealDuesWidgetProps) {
         </div>
 
         {/* Right: Today's Status Badges */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 flex-wrap">
           <span
             className={cn(
               'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border transition-colors',

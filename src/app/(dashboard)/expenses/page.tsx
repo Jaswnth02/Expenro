@@ -5,8 +5,9 @@ import { FinanceService } from '@/lib/mongodb/data-service';
 import { Expense } from '@/types';
 import { formatCurrency, formatDate, getMonthName } from '@/lib/utils';
 import { useExcludedCategories } from '@/lib/exclusions';
-import { Search, Trash2, Pencil, Calendar, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Search, Trash2, Pencil, Calendar, ChevronDown, X } from 'lucide-react';
 import { EditExpenseModal } from '@/components/expenses/edit-expense-modal';
+import { useMonth } from '@/context/month-context';
 
 interface DayGroup {
   date: string;
@@ -26,8 +27,7 @@ export default function ExpensesPage({
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const { selectedMonth, selectedYear } = useMonth();
   const [categories, setCategories] = useState<any[]>([]);
 
   // Edit / Modify expense modal state
@@ -46,41 +46,11 @@ export default function ExpensesPage({
     loadCategories();
   }, [refreshKey]);
 
-  const monthOptions = [
-    { month: 1, year: 2026, label: 'Jan 2026' },
-    { month: 2, year: 2026, label: 'Feb 2026' },
-    { month: 3, year: 2026, label: 'Mar 2026' },
-    { month: 4, year: 2026, label: 'Apr 2026' },
-    { month: 5, year: 2026, label: 'May 2026' },
-    { month: 6, year: 2026, label: 'Jun 2026' },
-    { month: 7, year: 2026, label: 'Jul 2026' },
-    { month: 8, year: 2026, label: 'Aug 2026' },
-    { month: 9, year: 2026, label: 'Sep 2026' },
-    { month: 10, year: 2026, label: 'Oct 2026' },
-    { month: 11, year: 2026, label: 'Nov 2026' },
-    { month: 12, year: 2026, label: 'Dec 2026' },
-  ];
-
-  const handlePrevMonth = () => {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((m) => m - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((m) => m + 1);
-    }
-  };
-
   const loadExpenses = async () => {
-    const list = await FinanceService.getExpenses(selectedMonth, selectedYear);
+    const list =
+      selectedMonth === 0
+        ? await FinanceService.getExpenses()
+        : await FinanceService.getExpenses(selectedMonth, selectedYear);
     setExpenses(list);
   };
 
@@ -171,58 +141,18 @@ export default function ExpensesPage({
     }, 0);
   }, [filteredExpenses, selectedCategory, isExcluded]);
 
-  const renderMonthSelector = () => (
-    <div className="flex items-center bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-lg p-0.5 shadow-2xs shrink-0">
-      <button
-        onClick={handlePrevMonth}
-        title="Previous Month"
-        className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-      >
-        <ChevronLeft className="w-3.5 h-3.5" />
-      </button>
-      <div className="relative flex items-center px-1">
-        <Calendar className="w-3 h-3 text-emerald-600 dark:text-emerald-400 mr-1 pointer-events-none shrink-0" />
-        <select
-          value={`${selectedMonth}-${selectedYear}`}
-          onChange={(e) => {
-            const [m, y] = e.target.value.split('-').map(Number);
-            setSelectedMonth(m);
-            setSelectedYear(y);
-          }}
-          className="bg-transparent text-xs font-bold text-zinc-800 dark:text-zinc-200 focus:outline-none cursor-pointer py-0.5"
-        >
-          {monthOptions.map((opt) => (
-            <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <button
-        onClick={handleNextMonth}
-        title="Next Month"
-        className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-      >
-        <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      {/* Top Header: Neat & Responsive Alignment */}
+      {/* Top Header */}
       <div className="flex flex-col gap-1 pb-2 border-b border-zinc-200/80 dark:border-zinc-800/80">
-        {/* Row 1: Title & Month Selector */}
+        {/* Row 1: Title */}
         <div className="flex items-center justify-between gap-2.5">
           <h1 className="text-lg sm:text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             Expenses
           </h1>
-
-          {/* Month Selector */}
-          {renderMonthSelector()}
         </div>
 
-        {/* Row 2: Total Amount on Next Line */}
+        {/* Row 2: Total Amount */}
         <div className="text-base sm:text-lg font-extrabold text-rose-600 dark:text-rose-400">
           {formatCurrency(totalFiltered)}
         </div>
@@ -304,11 +234,7 @@ export default function ExpensesPage({
                         key={exp.id}
                         className="py-2.5 px-3 flex items-center justify-between gap-2.5 active:bg-zinc-50 dark:active:bg-zinc-800/40 transition-colors"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: exp.category?.color || '#10B981' }}
-                          />
+                        <div className="flex items-center min-w-0">
                           <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                             {exp.description || exp.category?.name || 'Expense'}
                           </span>
@@ -408,16 +334,12 @@ export default function ExpensesPage({
                         {/* 1. Category */}
                         <td className="py-2.5 px-4 whitespace-nowrap">
                           <span
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
                             style={{
                               backgroundColor: `${exp.category?.color || '#10B981'}15`,
                               color: exp.category?.color || '#10B981',
                             }}
                           >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full"
-                              style={{ backgroundColor: exp.category?.color || '#10B981' }}
-                            />
                             {exp.category?.name || 'Other'}
                           </span>
                         </td>

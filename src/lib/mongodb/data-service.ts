@@ -40,6 +40,7 @@ import {
   deleteSavingsGoalAction,
   addSavingsTransactionAction,
   deleteSavingsTransactionAction,
+  getSavingsTransactionsAction,
 } from '@/lib/actions/savings';
 import {
   getBudgetsAction,
@@ -62,6 +63,7 @@ import {
   deleteMealEntryAction,
   getMealSettlementsAction,
   settleMonthlyMealsAction,
+  getMonthlyMealSummaryAction,
 } from '@/lib/actions/meals';
 import { updateUserProfileAction, getCurrentUserProfileAction } from '@/lib/actions/auth';
 
@@ -96,17 +98,19 @@ export const FinanceService = {
   },
 
   async createCategory(category: Omit<Category, 'id' | 'created_at'>): Promise<Category> {
-    const local = LocalFinanceStore.addCategory(category);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await createCategoryAction(category);
       if (res.success && res.data) {
-        LocalFinanceStore.updateCategory(local.id, res.data);
+        try {
+          LocalFinanceStore.addCategory(res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to create category in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] createCategory error:', err);
+      throw err;
+    }
   },
 
   async addCategory(category: Omit<Category, 'id' | 'created_at'>): Promise<Category> {
@@ -114,34 +118,34 @@ export const FinanceService = {
   },
 
   async updateCategory(id: string, updates: Partial<Category>): Promise<Category> {
-    LocalFinanceStore.updateCategory(id, updates);
-    if (!isMongoConfigured()) {
-      const updated = LocalFinanceStore.getCategories().find((c) => c.id === id);
-      if (!updated) throw new Error('Category not found');
-      return updated;
-    }
-
     try {
       const res = await updateCategoryAction(id, updates);
       if (res.success && res.data) {
-        LocalFinanceStore.updateCategory(id, res.data);
+        try {
+          LocalFinanceStore.updateCategory(id, res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    const fallback = LocalFinanceStore.getCategories().find((c) => c.id === id);
-    if (!fallback) throw new Error('Category not found');
-    return fallback;
+      throw new Error(res.error || 'Failed to update category in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] updateCategory error:', err);
+      throw err;
+    }
   },
 
   async deleteCategory(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteCategory(id);
-    if (!isMongoConfigured()) return true;
-
     try {
       const res = await deleteCategoryAction(id);
-      return res.success;
-    } catch {
-      return true;
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteCategory(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete category from MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] deleteCategory error:', err);
+      throw err;
     }
   },
 
@@ -165,46 +169,50 @@ export const FinanceService = {
   },
 
   async addExpense(expense: Omit<Expense, 'id' | 'created_at' | 'updated_at'>): Promise<Expense> {
-    const local = LocalFinanceStore.addExpense(expense);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await addExpenseAction(expense);
       if (res.success && res.data) {
-        LocalFinanceStore.updateExpense(local.id, res.data);
+        try {
+          LocalFinanceStore.addExpense(res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to save expense to MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] addExpense error:', err);
+      throw err;
+    }
   },
 
   async updateExpense(id: string, updates: Partial<Expense>): Promise<Expense> {
-    const local = LocalFinanceStore.updateExpense(id, updates);
-    if (!isMongoConfigured()) {
-      if (!local) throw new Error('Expense not found');
-      return local;
-    }
-
     try {
       const res = await updateExpenseAction(id, updates);
       if (res.success && res.data) {
-        LocalFinanceStore.updateExpense(id, res.data);
+        try {
+          LocalFinanceStore.updateExpense(id, res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    if (!local) throw new Error('Expense not found');
-    return local;
+      throw new Error(res.error || 'Failed to update expense in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] updateExpense error:', err);
+      throw err;
+    }
   },
 
   async deleteExpense(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteExpense(id);
-    if (!isMongoConfigured()) return true;
-
     try {
       const res = await deleteExpenseAction(id);
-      return res.success;
-    } catch {
-      return true;
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteExpense(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete expense from MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] deleteExpense error:', err);
+      throw err;
     }
   },
 
@@ -228,46 +236,50 @@ export const FinanceService = {
   },
 
   async addIncome(income: Omit<Income, 'id' | 'created_at' | 'updated_at'>): Promise<Income> {
-    const local = LocalFinanceStore.addIncome(income);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await addIncomeAction(income);
       if (res.success && res.data) {
-        LocalFinanceStore.updateIncome(local.id, res.data);
+        try {
+          LocalFinanceStore.addIncome(res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to save income to MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] addIncome error:', err);
+      throw err;
+    }
   },
 
   async updateIncome(id: string, updates: Partial<Income>): Promise<Income> {
-    const local = LocalFinanceStore.updateIncome(id, updates);
-    if (!isMongoConfigured()) {
-      if (!local) throw new Error('Income record not found');
-      return local;
-    }
-
     try {
       const res = await updateIncomeAction(id, updates);
       if (res.success && res.data) {
-        LocalFinanceStore.updateIncome(id, res.data);
+        try {
+          LocalFinanceStore.updateIncome(id, res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    if (!local) throw new Error('Income record not found');
-    return local;
+      throw new Error(res.error || 'Failed to update income in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] updateIncome error:', err);
+      throw err;
+    }
   },
 
   async deleteIncome(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteIncome(id);
-    if (!isMongoConfigured()) return true;
-
     try {
       const res = await deleteIncomeAction(id);
-      return res.success;
-    } catch {
-      return true;
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteIncome(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete income from MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] deleteIncome error:', err);
+      throw err;
     }
   },
 
@@ -293,16 +305,19 @@ export const FinanceService = {
   async addSavingsGoal(
     goal: Omit<SavingsGoal, 'id' | 'created_at' | 'updated_at' | 'saved_amount' | 'progress_percentage'>
   ): Promise<SavingsGoal> {
-    const local = LocalFinanceStore.addSavingsGoal(goal);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await addSavingsGoalAction(goal);
       if (res.success && res.data) {
+        try {
+          LocalFinanceStore.addSavingsGoal(res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to save savings goal to MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] addSavingsGoal error:', err);
+      throw err;
+    }
   },
 
   async updateSavingsGoal(id: string, updates: Partial<SavingsGoal>): Promise<SavingsGoal> {
@@ -311,51 +326,72 @@ export const FinanceService = {
       if (res.success && res.data) {
         return res.data;
       }
-    } catch {}
-    const goals = LocalFinanceStore.getSavingsGoals();
-    const found = goals.find((g) => g.id === id);
-    if (!found) throw new Error('Savings goal not found');
-    Object.assign(found, updates);
-    return found;
+      throw new Error(res.error || 'Failed to update savings goal');
+    } catch (err) {
+      console.error('[FinanceService] updateSavingsGoal error:', err);
+      throw err;
+    }
   },
 
   async deleteSavingsGoal(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteSavingsGoal(id);
-    if (!isMongoConfigured()) return true;
-
     try {
       const res = await deleteSavingsGoalAction(id);
-      return res.success;
-    } catch {
-      return true;
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteSavingsGoal(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete savings goal');
+    } catch (err) {
+      console.error('[FinanceService] deleteSavingsGoal error:', err);
+      throw err;
     }
   },
 
   async addSavingsTransaction(
     transaction: Omit<SavingsTransaction, 'id' | 'created_at' | 'updated_at'>
   ): Promise<SavingsTransaction> {
-    const local = LocalFinanceStore.addSavingsTransaction(transaction);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await addSavingsTransactionAction(transaction);
+      if (res.success && res.data) {
+        try {
+          LocalFinanceStore.addSavingsTransaction(res.data);
+        } catch {}
+        return res.data;
+      }
+      throw new Error(res.error || 'Failed to save savings transaction to MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] addSavingsTransaction error:', err);
+      throw err;
+    }
+  },
+
+  async deleteSavingsTransaction(id: string): Promise<boolean> {
+    try {
+      const res = await deleteSavingsTransactionAction(id);
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteSavingsTransaction(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete savings transaction');
+    } catch (err) {
+      console.error('[FinanceService] deleteSavingsTransaction error:', err);
+      throw err;
+    }
+  },
+
+  async getSavingsTransactions(goalId?: string): Promise<SavingsTransaction[]> {
+    try {
+      const res = await getSavingsTransactionsAction(goalId);
       if (res.success && res.data) {
         return res.data;
       }
     } catch {}
-    return local;
-  },
-
-  async deleteSavingsTransaction(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteSavingsTransaction(id);
-    if (!isMongoConfigured()) return true;
-
-    try {
-      const res = await deleteSavingsTransactionAction(id);
-      return res.success;
-    } catch {
-      return true;
-    }
+    const list = LocalFinanceStore.getSavingsTransactions();
+    return goalId ? list.filter((t) => t.goal_id === goalId) : list;
   },
 
   // ----------------------------------------------------------------------------
@@ -383,22 +419,25 @@ export const FinanceService = {
     month: number,
     year: number
   ): Promise<Budget> {
-    const local = LocalFinanceStore.addOrUpdateBudget({
-      user_id: 'user-default-1',
-      category_id: categoryId,
-      amount,
-      month,
-      year,
-    });
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await setBudgetAction(categoryId, amount, month, year);
       if (res.success && res.data) {
+        try {
+          LocalFinanceStore.addOrUpdateBudget({
+            user_id: res.data.user_id,
+            category_id: categoryId,
+            amount,
+            month,
+            year,
+          });
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to save budget in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] setBudget error:', err);
+      throw err;
+    }
   },
 
   async deleteBudget(id: string): Promise<boolean> {
@@ -584,44 +623,50 @@ export const FinanceService = {
   },
 
   async addMealEntry(entry: Omit<MealEntry, 'id' | 'created_at' | 'updated_at'>): Promise<MealEntry> {
-    const local = LocalFinanceStore.addMealEntry(entry);
-    if (!isMongoConfigured()) return local;
-
     try {
       const res = await addMealEntryAction(entry);
       if (res.success && res.data) {
+        try {
+          LocalFinanceStore.addMealEntry(res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return local;
+      throw new Error(res.error || 'Failed to save meal entry in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] addMealEntry error:', err);
+      throw err;
+    }
   },
 
   async updateMealEntry(id: string, updates: Partial<MealEntry>): Promise<MealEntry> {
-    const local = LocalFinanceStore.updateMealEntry(id, updates);
-    if (!isMongoConfigured()) {
-      if (!local) throw new Error('Meal entry not found');
-      return local;
-    }
-
     try {
       const res = await updateMealEntryAction(id, updates);
       if (res.success && res.data) {
+        try {
+          LocalFinanceStore.updateMealEntry(id, res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    if (!local) throw new Error('Meal entry not found');
-    return local;
+      throw new Error(res.error || 'Failed to update meal entry in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] updateMealEntry error:', err);
+      throw err;
+    }
   },
 
   async deleteMealEntry(id: string): Promise<boolean> {
-    LocalFinanceStore.deleteMealEntry(id);
-    if (!isMongoConfigured()) return true;
-
     try {
       const res = await deleteMealEntryAction(id);
-      return res.success;
-    } catch {
-      return true;
+      if (res.success) {
+        try {
+          LocalFinanceStore.deleteMealEntry(id);
+        } catch {}
+        return true;
+      }
+      throw new Error(res.error || 'Failed to delete meal entry from MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] deleteMealEntry error:', err);
+      throw err;
     }
   },
 
@@ -662,6 +707,12 @@ export const FinanceService = {
   },
 
   async getMonthlyMealSummary(month: number, year: number): Promise<MonthlyMealSummary> {
+    try {
+      const res = await getMonthlyMealSummaryAction(month, year);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    } catch {}
     return LocalFinanceStore.getMonthlyMealSummary(month, year);
   },
 
@@ -681,17 +732,20 @@ export const FinanceService = {
     month = new Date().getMonth() + 1,
     year = new Date().getFullYear()
   ): Promise<Income> {
-    const localOptimistic = LocalFinanceStore.calibrateWalletBalance(targetBalance);
-    if (!isMongoConfigured()) return localOptimistic;
-
     try {
       const res = await calibrateWalletBalanceAction(targetBalance, month, year);
       if (res.success && res.data) {
-        LocalFinanceStore.updateIncome(res.data.id, res.data);
+        try {
+          LocalFinanceStore.calibrateWalletBalance(targetBalance);
+          LocalFinanceStore.updateIncome(res.data.id, res.data);
+        } catch {}
         return res.data;
       }
-    } catch {}
-    return localOptimistic;
+      throw new Error(res.error || 'Failed to calibrate wallet balance in MongoDB');
+    } catch (err) {
+      console.error('[FinanceService] calibrateWalletBalance error:', err);
+      throw err;
+    }
   },
 
   async getFinancialSummary(month: number, year: number): Promise<FinancialSummary> {

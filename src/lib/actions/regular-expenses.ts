@@ -2,7 +2,7 @@
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
 import { RegularExpenseModel, ExpenseModel, CategoryModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { regularExpenseSchema } from '@/lib/validations/regular-expense';
 import { RegularExpense, PaymentMethod, Category } from '@/types';
 import { getEligibleRegularExpenses as filterEligible } from '@/lib/calculations/regular-expenses';
@@ -18,14 +18,6 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function resolveUserId(): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-  return null;
-}
-
 /**
  * Fetch all regular expenses for the authenticated user.
  */
@@ -36,14 +28,82 @@ export async function getRegularExpenses(): Promise<ActionResponse<RegularExpens
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
 
-    const docs = await RegularExpenseModel.find({ userId })
+    let docs = await RegularExpenseModel.find({ userId })
       .sort({ displayOrder: 1, name: 1 })
       .lean();
+
+    if (docs.length === 0) {
+      const [messCat, travelCat] = await Promise.all([
+        CategoryModel.findOne({ name: /Mess Food/i, $or: [{ userId: null }, { userId }] }).lean(),
+        CategoryModel.findOne({ name: /Travel/i, $or: [{ userId: null }, { userId }] }).lean(),
+      ]);
+
+      const seedDefaults = [
+        {
+          userId,
+          name: 'Mess - Morning',
+          amount: 50,
+          categoryId: messCat?._id.toString() || null,
+          icon: 'Utensils',
+          frequency: 'daily',
+          startDate: '2026-09-01',
+          displayTime: '08:00',
+          active: true,
+          displayOrder: 1,
+        },
+        {
+          userId,
+          name: 'Mess - Afternoon',
+          amount: 80,
+          categoryId: messCat?._id.toString() || null,
+          icon: 'Utensils',
+          frequency: 'daily',
+          startDate: '2026-09-01',
+          displayTime: '12:30',
+          active: true,
+          displayOrder: 2,
+        },
+        {
+          userId,
+          name: 'Mess - Night',
+          amount: 50,
+          categoryId: messCat?._id.toString() || null,
+          icon: 'Utensils',
+          frequency: 'daily',
+          startDate: '2026-09-01',
+          displayTime: '19:30',
+          active: true,
+          displayOrder: 3,
+        },
+        {
+          userId,
+          name: 'Bus',
+          amount: 30,
+          categoryId: travelCat?._id.toString() || null,
+          icon: 'Plane',
+          frequency: 'interval_days',
+          intervalDays: 2,
+          startDate: '2026-09-01',
+          displayTime: '08:30',
+          active: true,
+          displayOrder: 4,
+        },
+      ];
+
+      try {
+        await RegularExpenseModel.insertMany(seedDefaults);
+        docs = await RegularExpenseModel.find({ userId })
+          .sort({ displayOrder: 1, name: 1 })
+          .lean();
+      } catch (err) {
+        console.error('Failed to seed regular expenses:', err);
+      }
+    }
 
     const categoryIds = docs.map((d: any) => d.categoryId).filter(Boolean);
     const categories = await CategoryModel.find({ _id: { $in: categoryIds } }).lean();
@@ -97,7 +157,7 @@ export async function createRegularExpense(rawInput: unknown): Promise<ActionRes
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
@@ -184,7 +244,7 @@ export async function updateRegularExpense(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
@@ -278,7 +338,7 @@ export async function toggleRegularExpense(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
@@ -332,7 +392,7 @@ export async function deleteRegularExpense(id: string): Promise<ActionResponse<b
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
@@ -357,7 +417,7 @@ export async function getEligibleRegularExpenses(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }
@@ -425,7 +485,7 @@ export async function addSelectedRegularExpenses(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'Unauthorized. Please log in.' };
     }

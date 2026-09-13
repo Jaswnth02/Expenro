@@ -16,7 +16,7 @@ export function RecentTransactions({
   const recent = expenses.slice(0, 5);
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 shadow-xs flex flex-col justify-between">
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-3.5 sm:p-5 shadow-xs flex flex-col justify-between w-full max-w-full min-w-0 overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
@@ -62,11 +62,7 @@ export function RecentTransactions({
               key={exp.id}
               className="py-3 flex items-center justify-between gap-3 group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 px-1 rounded-xl transition-colors"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: exp.category?.color || '#10B981' }}
-                />
+              <div className="flex items-center min-w-0">
 
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">

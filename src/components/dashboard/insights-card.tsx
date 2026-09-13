@@ -34,7 +34,7 @@ export function InsightsCard({ insights }: InsightsCardProps) {
   };
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 shadow-xs">
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-3.5 sm:p-5 shadow-xs w-full max-w-full min-w-0 overflow-hidden">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
           <Sparkles className="w-3.5 h-3.5" />
@@ -53,12 +53,12 @@ export function InsightsCard({ insights }: InsightsCardProps) {
           {insights.map((insight) => (
             <div
               key={insight.id}
-              className={`p-3.5 rounded-xl border flex items-start gap-3 transition-colors ${getBadgeStyle(
+              className={`p-3 sm:p-3.5 rounded-xl border flex items-start gap-2.5 sm:gap-3 transition-colors min-w-0 overflow-hidden ${getBadgeStyle(
                 insight.type
               )}`}
             >
               {getIcon(insight.type)}
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0 flex-1">
                 <span className="text-xs font-bold leading-tight">{insight.title}</span>
                 <p className="text-xs opacity-90 mt-1 leading-relaxed">
                   {insight.message}

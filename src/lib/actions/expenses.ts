@@ -1,8 +1,8 @@
 'use server';
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
-import { ExpenseModel, CategoryModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { ExpenseModel, CategoryModel } from '@/lib/mongodb/models';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { Expense, Category } from '@/types';
 
 interface ActionResponse<T = unknown> {
@@ -16,17 +16,6 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function resolveUserId(explicitUserId?: string): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  if (explicitUserId && explicitUserId.length > 5) return explicitUserId;
-
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-
-  return null;
-}
-
 export async function getExpensesAction(
   month?: number,
   year?: number
@@ -37,13 +26,13 @@ export async function getExpensesAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
 
     const query: any = { userId };
-    if (month !== undefined && year !== undefined) {
+    if (month !== undefined && year !== undefined && month > 0) {
       const monthStr = String(month).padStart(2, '0');
       const lastDay = new Date(year, month, 0).getDate();
       query.expenseDate = {
@@ -113,7 +102,7 @@ export async function addExpenseAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId(expense.user_id);
+    const userId = await getEffectiveUserId(expense.user_id);
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }

@@ -1,8 +1,8 @@
 'use server';
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
-import { IncomeModel, ExpenseModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { IncomeModel, ExpenseModel } from '@/lib/mongodb/models';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { Income } from '@/types';
 
 interface ActionResponse<T = unknown> {
@@ -14,18 +14,6 @@ interface ActionResponse<T = unknown> {
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
-}
-
-async function resolveUserId(explicitUserId?: string): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  if (explicitUserId && explicitUserId.length > 5) return explicitUserId;
-
-  // Fallback to first user in database if any
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-
-  return null;
 }
 
 export async function addIncomeAction(
@@ -45,7 +33,7 @@ export async function addIncomeAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId(income.user_id);
+    const userId = await getEffectiveUserId(income.user_id);
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -88,13 +76,13 @@ export async function getIncomesAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
 
     const query: any = { userId };
-    if (month !== undefined && year !== undefined) {
+    if (month !== undefined && year !== undefined && month > 0) {
       const monthStr = String(month).padStart(2, '0');
       const lastDay = new Date(year, month, 0).getDate();
       query.incomeDate = {
@@ -195,12 +183,13 @@ export async function deleteIncomeAction(id: string): Promise<ActionResponse<boo
 }
 
 /**
- * Calibrate wallet balance by calculating target difference and inserting an income adjustment
+ * Calibrate wallet balance by updating or creating an Opening Balance record in MongoDB
+ * so all-time available balance matches targetBalance accurately.
  */
 export async function calibrateWalletBalanceAction(
   targetBalance: number,
-  month: number,
-  year: number
+  _month?: number,
+  _year?: number
 ): Promise<ActionResponse<Income>> {
   try {
     if (!isMongoConfigured()) {
@@ -208,66 +197,79 @@ export async function calibrateWalletBalanceAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
 
-    const monthStr = String(month).padStart(2, '0');
-    const lastDay = new Date(year, month, 0).getDate();
-    const dateQuery = {
-      $gte: `${year}-${monthStr}-01`,
-      $lte: `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`,
-    };
+    const { SavingsTransactionModel } = await import('@/lib/mongodb/models');
 
-    const [incomes, expenses] = await Promise.all([
-      IncomeModel.find({ userId, incomeDate: dateQuery }).lean(),
-      ExpenseModel.find({ userId, expenseDate: dateQuery }).lean(),
+    // Fetch all records for the user to compute lifetime balance accurately
+    const [incomes, expenses, savingsTransactions] = await Promise.all([
+      IncomeModel.find({ userId }).lean(),
+      ExpenseModel.find({ userId }).lean(),
+      SavingsTransactionModel.find({ userId }).lean(),
     ]);
 
-    const totalIncome = incomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-    const currentRemaining = totalIncome - totalExpenses;
+    const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+    const totalSavings = savingsTransactions.reduce(
+      (sum, tx: any) => sum + Number(tx.amount || 0),
+      0
+    );
 
-    const adjustmentAmount = targetBalance - currentRemaining;
-    if (adjustmentAmount === 0) {
-      return {
-        success: true,
-        data: {
-          id: 'noop',
-          user_id: userId,
-          source: 'Wallet Calibration',
-          amount: 0,
-          description: 'Balance already matches target',
-          income_date: `${year}-${monthStr}-01`,
-          notes: 'No adjustment needed',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+    // Identify opening balance or existing calibration record
+    const calibrationDoc = incomes.find(
+      (i: any) =>
+        i.source?.toLowerCase() === 'opening balance' ||
+        i.description?.toLowerCase() === 'wallet balance calibration' ||
+        i.description?.toLowerCase() === 'starting wallet balance calibration'
+    );
+
+    const otherIncomesTotal = incomes
+      .filter((i: any) => !calibrationDoc || i._id.toString() !== calibrationDoc._id.toString())
+      .reduce((sum, inc) => sum + Number(inc.amount || 0), 0);
+
+    // Target lifetime equation:
+    // requiredOpening + otherIncomesTotal - totalExpenses - totalSavings = targetBalance
+    // => requiredOpening = targetBalance + totalExpenses + totalSavings - otherIncomesTotal
+    const requiredOpening = Number(
+      (targetBalance + totalExpenses + totalSavings - otherIncomesTotal).toFixed(2)
+    );
+
+    let resultDoc: any;
+    if (calibrationDoc) {
+      resultDoc = await IncomeModel.findByIdAndUpdate(
+        calibrationDoc._id,
+        {
+          amount: requiredOpening,
+          notes: `Calibrated wallet balance to ₹${targetBalance.toLocaleString()}`,
+          updatedAt: new Date(),
         },
-      };
+        { new: true }
+      ).lean();
+    } else {
+      resultDoc = await IncomeModel.create({
+        userId,
+        source: 'Opening Balance',
+        amount: requiredOpening,
+        description: 'Starting wallet balance calibration',
+        incomeDate: '2026-06-01',
+        notes: `Calibrated wallet balance to ₹${targetBalance.toLocaleString()}`,
+      });
     }
-
-    const created = await IncomeModel.create({
-      userId,
-      source: 'Other',
-      amount: adjustmentAmount,
-      description: 'Wallet Balance Calibration',
-      incomeDate: `${year}-${monthStr}-01`,
-      notes: `Adjusted balance from ${currentRemaining} to ${targetBalance}`,
-    });
 
     return {
       success: true,
       data: {
-        id: created._id.toString(),
-        user_id: created.userId,
-        source: created.source,
-        amount: created.amount,
-        description: created.description,
-        income_date: created.incomeDate,
-        notes: created.notes,
-        created_at: new Date(created.createdAt).toISOString(),
-        updated_at: new Date(created.updatedAt).toISOString(),
+        id: resultDoc._id.toString(),
+        user_id: resultDoc.userId,
+        source: resultDoc.source,
+        amount: Number(resultDoc.amount),
+        description: resultDoc.description,
+        income_date: resultDoc.incomeDate,
+        notes: resultDoc.notes,
+        created_at: new Date(resultDoc.createdAt).toISOString(),
+        updated_at: new Date(resultDoc.updatedAt).toISOString(),
       },
     };
   } catch (err) {

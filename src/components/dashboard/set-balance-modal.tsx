@@ -36,7 +36,7 @@ export function SetBalanceModal({
 
   if (!isOpen) return null;
 
-  const presets = [500, 1000, 2000, 5000, 10000];
+  const presets = [300, 420, 500, 1000, 2000, 5000];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,10 +72,10 @@ export function SetBalanceModal({
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-                Set Current Wallet Balance
+                Set Custom Balance
               </h2>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                Calibrate to match your real bank account
+                Set your exact available funds in cash or bank
               </p>
             </div>
           </div>
@@ -115,7 +115,7 @@ export function SetBalanceModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>
             <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1 block">
-              Actual Current Balance (₹) *
+              Your Custom Balance (₹) *
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-zinc-400">
@@ -173,10 +173,10 @@ export function SetBalanceModal({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Calibrating...</span>
+                  <span>Saving...</span>
                 </>
               ) : (
-                'Set Real Balance'
+                'Save Custom Balance'
               )}
             </button>
           </div>

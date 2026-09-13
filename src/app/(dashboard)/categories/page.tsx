@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { LocalFinanceStore } from '@/lib/data-service';
 import { FinanceService } from '@/lib/mongodb/data-service';
 import { Category, CategoryType } from '@/types';
 import {
@@ -14,7 +13,6 @@ import {
   Search,
   Pencil,
   Trash2,
-  RotateCcw,
   CheckCircle2,
   AlertCircle,
   X,
@@ -22,6 +20,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
+import { useContextualAdd } from '@/context/contextual-add-context';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -35,6 +34,31 @@ export default function CategoriesPage() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
+  const { registerAddHandler } = useContextualAdd();
+
+  // Contextual Add listener: when bottom mobile "+" button is tapped on /categories, open New Category modal
+  useEffect(() => {
+    const unregister = registerAddHandler('categories', () => {
+      setEditingCategory(null);
+      setName('');
+      setFormError(null);
+      setIsModalOpen(true);
+    });
+
+    const handleWindowEvent = () => {
+      setEditingCategory(null);
+      setName('');
+      setFormError(null);
+      setIsModalOpen(true);
+    };
+    window.addEventListener('expenro:trigger-add', handleWindowEvent);
+
+    return () => {
+      unregister();
+      window.removeEventListener('expenro:trigger-add', handleWindowEvent);
+    };
+  }, [registerAddHandler]);
 
   // Form states
   const [name, setName] = useState('');
@@ -73,9 +97,8 @@ export default function CategoriesPage() {
       });
 
       setUsageCount(counts);
-    } catch {
-      const cats = LocalFinanceStore.getCategories();
-      setCategories(cats);
+    } catch (err) {
+      console.error('Failed to load categories from MongoDB:', err);
     }
   };
 
@@ -166,18 +189,6 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleResetDefaults = async () => {
-    if (
-      confirm(
-        'Reset all categories back to default system presets? Custom categories will be replaced with defaults.'
-      )
-    ) {
-      LocalFinanceStore.resetCategories();
-      showFeedback('Categories reset to system defaults.');
-      await loadData();
-    }
-  };
-
   const filteredCategories = categories.filter((c) => {
     const matchesTab = activeTab === 'all' || c.type === activeTab;
     const matchesSearch =
@@ -210,16 +221,6 @@ export default function CategoriesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleResetDefaults}
-            type="button"
-            title="Reset to default categories"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-xs font-semibold transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset Defaults</span>
-          </button>
-
           <button
             onClick={() => openAddModal('expense')}
             type="button"

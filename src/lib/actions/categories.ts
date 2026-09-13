@@ -2,7 +2,7 @@
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
 import { CategoryModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { Category } from '@/types';
 import { DEFAULT_CATEGORIES } from '@/lib/data-service';
 
@@ -27,8 +27,7 @@ export async function getCategoriesAction(): Promise<ActionResponse<Category[]>>
     }
 
     await connectToDatabase();
-    const session = await getSessionUser();
-    const userId = session?.userId;
+    const userId = await getEffectiveUserId();
 
     const query = userId ? { $or: [{ userId: null }, { userId }] } : { userId: null };
     const categories = await CategoryModel.find(query).sort({ name: 1 }).lean();
@@ -166,10 +165,10 @@ export async function createCategoryAction(
     }
 
     await connectToDatabase();
-    const session = await getSessionUser();
+    const userId = await getEffectiveUserId(category.user_id);
 
     const created = await CategoryModel.create({
-      userId: session?.userId || category.user_id || null,
+      userId: userId || null,
       name: category.name,
       type: category.type,
       color: category.color || '#10B981',

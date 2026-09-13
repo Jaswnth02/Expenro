@@ -1,8 +1,8 @@
 'use server';
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
-import { BudgetModel, CategoryModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
+import { BudgetModel, CategoryModel } from '@/lib/mongodb/models';
+import { getEffectiveUserId } from '@/lib/auth/session';
 import { Budget, Category } from '@/types';
 
 interface ActionResponse<T = unknown> {
@@ -16,14 +16,6 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function resolveUserId(): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-  return null;
-}
-
 export async function getBudgetsAction(
   month?: number,
   year?: number
@@ -34,7 +26,7 @@ export async function getBudgetsAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
@@ -102,7 +94,7 @@ export async function setBudgetAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }

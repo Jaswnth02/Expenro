@@ -75,9 +75,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const res = await loginAction(email, password);
+      let res: { success: boolean; error?: string; user?: any; token?: string };
+      try {
+        const apiRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        res = await apiRes.json();
+      } catch {
+        res = await loginAction(email, password);
+      }
+
       if (!res.success) {
-        return { error: new Error(res.error || 'Invalid credentials') };
+        return { error: new Error(res.error || 'Invalid email or password.') };
+      }
+
+      if (res.token && typeof document !== 'undefined') {
+        document.cookie = `expenro_session=${res.token}; path=/; max-age=2592000; SameSite=Lax`;
       }
 
       if (res.user) {
@@ -87,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           user_metadata: { full_name: res.user.fullName },
         });
         setIsDemoUser(false);
-        await loadUser();
+        loadUser().catch(() => {});
       }
 
       return { error: null };
@@ -143,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInAsDemo = () => {
     if (typeof document !== 'undefined') {
       document.cookie = 'expenro_demo_user=true; path=/; max-age=86400;';
+      fetch('/api/auth/demo', { method: 'POST' }).catch(() => {});
     }
     setUser(null);
     setProfile(INITIAL_USER);

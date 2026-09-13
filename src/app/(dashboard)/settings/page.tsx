@@ -11,13 +11,20 @@ import {
   Sun,
   Laptop,
   Download,
-  RotateCcw,
   CheckCircle2,
   Database,
   AlertTriangle,
   Wallet,
+  Smartphone,
 } from 'lucide-react';
 import { RegularExpenseList } from '@/components/regular-expenses/regular-expense-list';
+import { SetBalanceModal } from '@/components/dashboard/set-balance-modal';
+import { FinanceService } from '@/lib/mongodb/data-service';
+import {
+  useCustomNavTabs,
+  CUSTOM_NAV_TAB_OPTIONS,
+  CustomNavTabId,
+} from '@/lib/nav-preferences';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -28,10 +35,47 @@ export default function SettingsPage() {
   const [currency, setCurrency] = useState('INR');
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(1000);
   const [message, setMessage] = useState<string | null>(null);
+  const [customTabs, setCustomTabs] = useCustomNavTabs();
+
+  const handleSelectTab = (slotIndex: 0 | 1, tabId: CustomNavTabId) => {
+    let newTabs: [CustomNavTabId, CustomNavTabId];
+    if (slotIndex === 0) {
+      if (tabId === customTabs[1]) {
+        newTabs = [tabId, customTabs[0]];
+      } else {
+        newTabs = [tabId, customTabs[1]];
+      }
+    } else {
+      if (tabId === customTabs[0]) {
+        newTabs = [customTabs[1], tabId];
+      } else {
+        newTabs = [customTabs[0], tabId];
+      }
+    }
+    setCustomTabs(newTabs);
+    setMessage(`Mobile bottom bar updated: 3rd tab is ${CUSTOM_NAV_TAB_OPTIONS[newTabs[0]].shortLabel}, 4th tab is ${CUSTOM_NAV_TAB_OPTIONS[newTabs[1]].shortLabel}.`);
+    setTimeout(() => setMessage(null), 3500);
+  };
+
+  const [isSetBalanceOpen, setIsSetBalanceOpen] = useState(false);
+  const [currentWalletBalance, setCurrentWalletBalance] = useState<number>(0);
+
+  const loadWalletBalance = async () => {
+    try {
+      const now = new Date();
+      const m = now.getMonth() + 1;
+      const y = now.getFullYear();
+      const summary = await FinanceService.getFinancialSummary(m, y);
+      setCurrentWalletBalance(summary.availableBalance ?? summary.remainingBalance ?? 0);
+    } catch {
+      // Fallback
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
     setLowBalanceThreshold(LocalFinanceStore.getLowBalanceThreshold());
+    loadWalletBalance();
   }, []);
 
   const handleUpdateThreshold = (val: number) => {
@@ -58,43 +102,35 @@ export default function SettingsPage() {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const handleResetData = () => {
-    if (confirm('Are you sure you want to reset all data back to the clean seed state?')) {
-      LocalFinanceStore.resetToSeed();
-      setMessage('Sample data has been re-initialized.');
-      setTimeout(() => {
-        setMessage(null);
-        window.location.reload();
-      }, 1000);
+  const handleExportCSV = async () => {
+    try {
+      const expenses = await FinanceService.getExpenses();
+      const headers = ['ID', 'Date', 'Category', 'Description', 'Payment Method', 'Amount'];
+      const rows = expenses.map((e) => [
+        e.id,
+        e.expense_date,
+        e.category?.name || 'Other',
+        `"${(e.description || '').replace(/"/g, '""')}"`,
+        e.payment_method,
+        e.amount,
+      ]);
+
+      const csvContent =
+        'data:text/csv;charset=utf-8,' +
+        [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `expenro_expenses_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setMessage('Expenses CSV downloaded.');
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
     }
-  };
-
-  const handleExportCSV = () => {
-    const expenses = LocalFinanceStore.getExpenses();
-    const headers = ['ID', 'Date', 'Category', 'Description', 'Payment Method', 'Amount'];
-    const rows = expenses.map((e) => [
-      e.id,
-      e.expense_date,
-      e.category?.name || 'Other',
-      `"${e.description.replace(/"/g, '""')}"`,
-      e.payment_method,
-      e.amount,
-    ]);
-
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `expenro_expenses_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setMessage('Expenses CSV downloaded.');
-    setTimeout(() => setMessage(null), 3000);
   };
 
   return (
@@ -247,7 +283,136 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Row 2: Low Balance Warning Buffer */}
+      {/* Row 2: Mobile Navigation Bar Customization */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs flex flex-col gap-3.5">
+        <div>
+          <div className="flex items-center gap-1.5 mb-1">
+            <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              Mobile Navigation Bar Customization
+            </h2>
+          </div>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+            Choose which 2 fast-access destinations appear in the <strong>3rd and 4th positions</strong> of your mobile bottom navigation bar. Remaining sections remain available in the top-left ☰ menu.
+          </p>
+        </div>
+
+        {/* Slot Selection Dropdowns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* 3rd Position Selector */}
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/70 dark:border-zinc-800/80 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                📍 3rd Position Tab
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                {CUSTOM_NAV_TAB_OPTIONS[customTabs[0]]?.shortLabel || 'Savings'}
+              </span>
+            </div>
+            <select
+              value={customTabs[0]}
+              onChange={(e) => handleSelectTab(0, e.target.value as CustomNavTabId)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-lg text-xs font-semibold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+            >
+              {Object.values(CUSTOM_NAV_TAB_OPTIONS).map((opt) => (
+                <option key={`slot0-${opt.id}`} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-zinc-400">
+              {CUSTOM_NAV_TAB_OPTIONS[customTabs[0]]?.description}
+            </p>
+          </div>
+
+          {/* 4th Position Selector */}
+          <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/70 dark:border-zinc-800/80 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                📍 4th Position Tab
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                {CUSTOM_NAV_TAB_OPTIONS[customTabs[1]]?.shortLabel || 'Meals'}
+              </span>
+            </div>
+            <select
+              value={customTabs[1]}
+              onChange={(e) => handleSelectTab(1, e.target.value as CustomNavTabId)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-lg text-xs font-semibold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+            >
+              {Object.values(CUSTOM_NAV_TAB_OPTIONS).map((opt) => (
+                <option key={`slot1-${opt.id}`} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-zinc-400">
+              {CUSTOM_NAV_TAB_OPTIONS[customTabs[1]]?.description}
+            </p>
+          </div>
+        </div>
+
+        {/* Live Mockup Preview of Bottom Bar */}
+        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+            <span>Live Bottom Bar Preview:</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Updates instantly</span>
+          </div>
+
+          <div className="p-2 bg-zinc-100/80 dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800 rounded-xl flex items-center justify-around select-none">
+            <div className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-zinc-400">
+              <div className="w-4 h-4 rounded bg-zinc-300 dark:bg-zinc-700" />
+              <span>Home</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-zinc-400">
+              <div className="w-4 h-4 rounded bg-zinc-300 dark:bg-zinc-700" />
+              <span>Expenses</span>
+            </div>
+            <div className="flex flex-col items-center -mt-3">
+              <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs font-bold text-sm">
+                +
+              </div>
+              <span className="text-[9px] font-bold text-zinc-500 mt-0.5">Add</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+              {React.createElement(CUSTOM_NAV_TAB_OPTIONS[customTabs[0]]?.icon || CUSTOM_NAV_TAB_OPTIONS.savings.icon, { className: 'w-4 h-4' })}
+              <span>{CUSTOM_NAV_TAB_OPTIONS[customTabs[0]]?.shortLabel || 'Savings'}</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+              {React.createElement(CUSTOM_NAV_TAB_OPTIONS[customTabs[1]]?.icon || CUSTOM_NAV_TAB_OPTIONS.meals.icon, { className: 'w-4 h-4' })}
+              <span>{CUSTOM_NAV_TAB_OPTIONS[customTabs[1]]?.shortLabel || 'Meals'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Set Custom Wallet Balance */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Wallet className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            <h2 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              Set Custom Wallet Balance
+            </h2>
+          </div>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+            Calibrate your current running balance to match your real bank or cash account right now. Current: <strong className="text-teal-600 dark:text-teal-400 font-bold">₹{currentWalletBalance.toLocaleString('en-IN')}</strong>.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSetBalanceOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-bold text-xs shadow-2xs shadow-teal-600/20 transition-all active:scale-95 cursor-pointer"
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Set Custom Balance</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Row 4: Low Balance Warning Buffer */}
       <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="max-w-xl">
           <div className="flex items-center gap-1.5 mb-1">
@@ -307,28 +472,32 @@ export default function SettingsPage() {
             </h2>
           </div>
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
-            Export your financial records to CSV or restore default sample data.
+            All your financial records are permanently stored in MongoDB Atlas until you delete them.
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-xs transition-colors hover:opacity-90 shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-xs transition-colors hover:opacity-90 shadow-2xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
           </button>
-
-          <button
-            onClick={handleResetData}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-bold text-xs transition-colors shadow-2xs cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Data</span>
-          </button>
         </div>
       </div>
+
+      {/* Set Custom Balance Modal */}
+      <SetBalanceModal
+        isOpen={isSetBalanceOpen}
+        onClose={() => setIsSetBalanceOpen(false)}
+        currentBalance={currentWalletBalance}
+        onSuccess={() => {
+          loadWalletBalance();
+          setMessage('Custom wallet balance calibrated successfully.');
+          setTimeout(() => setMessage(null), 3000);
+        }}
+      />
     </div>
   );
 }

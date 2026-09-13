@@ -1,9 +1,9 @@
 'use server';
 
 import { connectToDatabase, isMongoConfigured } from '@/lib/mongodb/client';
-import { MealEntryModel, MealSettlementModel, ExpenseModel, CategoryModel, UserModel } from '@/lib/mongodb/models';
-import { getSessionUser } from '@/lib/auth/session';
-import { MealEntry, MealSettlement, PaymentMethod, Expense } from '@/types';
+import { MealEntryModel, MealSettlementModel, ExpenseModel, CategoryModel } from '@/lib/mongodb/models';
+import { getEffectiveUserId } from '@/lib/auth/session';
+import { MealEntry, MealSettlement, PaymentMethod, Expense, MonthlyMealSummary } from '@/types';
 
 interface ActionResponse<T = unknown> {
   success: boolean;
@@ -16,14 +16,6 @@ function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function resolveUserId(): Promise<string | null> {
-  const session = await getSessionUser();
-  if (session?.userId) return session.userId;
-  const firstUser = await UserModel.findOne().lean();
-  if (firstUser) return firstUser._id.toString();
-  return null;
-}
-
 export async function getMealEntriesAction(
   month?: number,
   year?: number
@@ -34,13 +26,13 @@ export async function getMealEntriesAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
 
     const query: any = { userId };
-    if (month !== undefined && year !== undefined) {
+    if (month !== undefined && year !== undefined && month > 0) {
       const monthStr = String(month).padStart(2, '0');
       const lastDay = new Date(year, month, 0).getDate();
       query.date = {
@@ -88,7 +80,7 @@ export async function addMealEntryAction(
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -195,7 +187,7 @@ export async function getMealSettlementsAction(): Promise<ActionResponse<MealSet
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: true, data: [] };
     }
@@ -235,7 +227,7 @@ export async function settleMonthlyMealsAction(params: {
     }
 
     await connectToDatabase();
-    const userId = await resolveUserId();
+    const userId = await getEffectiveUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -336,6 +328,138 @@ export async function settleMonthlyMealsAction(params: {
     }
 
     return { success: true, data: { settlement, expense } };
+  } catch (err) {
+    return { success: false, error: getErrorMessage(err) };
+  }
+}
+
+/**
+ * Get monthly summary statistics directly from MongoDB Atlas
+ */
+export async function getMonthlyMealSummaryAction(
+  month: number,
+  year: number
+): Promise<ActionResponse<MonthlyMealSummary>> {
+  try {
+    if (!isMongoConfigured()) {
+      return {
+        success: true,
+        data: {
+          month,
+          year,
+          totalAmountSpent: 0,
+          totalUnpaidDues: 0,
+          totalMealsEaten: 0,
+          totalMealsSkipped: 0,
+          breakfastCount: 0,
+          lunchCount: 0,
+          dinnerCount: 0,
+          customCount: 0,
+          isSettled: false,
+          settlement: null,
+          entries: [],
+        },
+      };
+    }
+
+    await connectToDatabase();
+    const userId = await getEffectiveUserId();
+    if (!userId) {
+      return {
+        success: true,
+        data: {
+          month,
+          year,
+          totalAmountSpent: 0,
+          totalUnpaidDues: 0,
+          totalMealsEaten: 0,
+          totalMealsSkipped: 0,
+          breakfastCount: 0,
+          lunchCount: 0,
+          dinnerCount: 0,
+          customCount: 0,
+          isSettled: false,
+          settlement: null,
+          entries: [],
+        },
+      };
+    }
+
+    const monthStr = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const dateQuery = {
+      $gte: `${year}-${monthStr}-01`,
+      $lte: `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`,
+    };
+
+    const [entries, settlementDoc] = await Promise.all([
+      MealEntryModel.find({ userId, date: dateQuery }).lean(),
+      MealSettlementModel.findOne({ userId, month, year }).lean(),
+    ]);
+
+    const activeMeals = entries.filter((m: any) => m.status !== 'skipped');
+    const skippedMeals = entries.filter((m: any) => m.status === 'skipped');
+    const totalAmountSpent = entries.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+    const totalMealsEaten = activeMeals.length;
+    const totalMealsSkipped = skippedMeals.length;
+    const totalUnpaidDues = settlementDoc
+      ? 0
+      : activeMeals.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+    const breakfastCount = activeMeals.filter((m: any) => m.mealType === 'breakfast').length;
+    const lunchCount = activeMeals.filter((m: any) => m.mealType === 'lunch').length;
+    const dinnerCount = activeMeals.filter((m: any) => m.mealType === 'dinner').length;
+    const customCount = activeMeals.filter((m: any) => m.mealType === 'custom').length;
+
+    let settlement: MealSettlement | null = null;
+    if (settlementDoc) {
+      settlement = {
+        id: settlementDoc._id.toString(),
+        user_id: settlementDoc.userId,
+        month: settlementDoc.month,
+        year: settlementDoc.year,
+        total_meals: settlementDoc.totalMeals,
+        total_amount: Number(settlementDoc.totalAmount),
+        payment_method: settlementDoc.paymentMethod as any,
+        payment_date: settlementDoc.paymentDate,
+        expense_id: settlementDoc.expenseId,
+        notes: settlementDoc.notes,
+        created_at: new Date(settlementDoc.createdAt).toISOString(),
+      };
+    }
+
+    const formattedEntries: MealEntry[] = entries.map((d: any) => ({
+      id: d._id.toString(),
+      user_id: d.userId,
+      date: d.date,
+      meal_type: d.mealType,
+      name: d.name,
+      amount: Number(d.amount),
+      status: d.status,
+      notes: d.notes,
+      is_settled: d.isSettled,
+      settlement_id: d.settlementId,
+      created_at: new Date(d.createdAt).toISOString(),
+      updated_at: new Date(d.updatedAt).toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        month,
+        year,
+        totalAmountSpent,
+        totalUnpaidDues,
+        totalMealsEaten,
+        totalMealsSkipped,
+        breakfastCount,
+        lunchCount,
+        dinnerCount,
+        customCount,
+        isSettled: !!settlementDoc,
+        settlement,
+        entries: formattedEntries,
+      },
+    };
   } catch (err) {
     return { success: false, error: getErrorMessage(err) };
   }

@@ -5,7 +5,6 @@ import {
   Coffee,
   Sun,
   Moon,
-  Plus,
   Check,
   X,
   Edit2,
@@ -25,7 +24,7 @@ interface QuickMealLoggerProps {
     status: MealStatus;
     notes?: string;
   }) => Promise<void>;
-  onUpdateMeal: (id: string, updates: Partial<MealEntry>) => Promise<void>;
+  onUpdateMeal: (id: string, updates: { amount?: number; status?: MealStatus; notes?: string }) => Promise<void>;
   onDeleteMeal: (id: string) => Promise<void>;
 }
 
@@ -42,7 +41,7 @@ const PRESET_MEALS: {
   {
     type: 'breakfast',
     title: 'Morning / Breakfast',
-    timeHint: '08:00 - 10:00',
+    timeHint: '07:30 - 09:30',
     defaultPrice: 50,
     icon: Coffee,
     accentColor: 'text-amber-500',
@@ -81,12 +80,6 @@ export function QuickMealLogger({
 }: QuickMealLoggerProps) {
   const isToday = date === getTodayDateString();
 
-  // Custom meal modal / inline drawer state
-  const [isAddingCustom, setIsAddingCustom] = useState(false);
-  const [customName, setCustomName] = useState('');
-  const [customAmount, setCustomAmount] = useState('');
-  const [customNotes, setCustomNotes] = useState('');
-
   // Editing amount state for existing meals
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmountVal, setEditAmountVal] = useState('');
@@ -123,29 +116,6 @@ export function QuickMealLogger({
     }
   };
 
-  const handleSaveCustom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = parseFloat(customAmount);
-    if (!customName.trim() || isNaN(parsed) || parsed <= 0) return;
-
-    try {
-      setLoadingType('custom');
-      await onAddMeal({
-        meal_type: 'custom',
-        name: customName.trim(),
-        amount: parsed,
-        status: 'eaten',
-        notes: customNotes.trim() || undefined,
-      });
-      setCustomName('');
-      setCustomAmount('');
-      setCustomNotes('');
-      setIsAddingCustom(false);
-    } finally {
-      setLoadingType(null);
-    }
-  };
-
   const handleSaveEditAmount = async (id: string) => {
     const parsed = parseFloat(editAmountVal);
     if (isNaN(parsed) || parsed < 0) return;
@@ -154,38 +124,31 @@ export function QuickMealLogger({
   };
 
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs">
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 sm:p-4 shadow-xs">
       {/* Header & Date Picker */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              {isToday ? "Today's Meal Logger" : 'Log Meals for Date'}
-            </h3>
-            {isToday && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                Today
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            1-tap record eaten meals with prices or mark skipped
-          </p>
+      <div className="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+            {isToday ? "Today's Meals" : 'Log Meals'}
+          </h3>
+          {isToday && (
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 shrink-0">
+              Today
+            </span>
+          )}
         </div>
 
         {/* Date Selector */}
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-        </div>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          className="px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 text-[11px] font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 shrink-0 cursor-pointer"
+        />
       </div>
 
       {/* Preset Sessions Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {PRESET_MEALS.map((preset) => {
           const Icon = preset.icon;
           const entry = dayEntries.find((e) => e.meal_type === preset.type);
@@ -197,84 +160,64 @@ export function QuickMealLogger({
             <div
               key={preset.type}
               className={cn(
-                'rounded-xl border p-4 transition-all flex flex-col justify-between',
+                'rounded-xl border p-2 sm:p-2.5 transition-all flex flex-col justify-between gap-1.5',
                 isLogged
                   ? isEaten
                     ? 'border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10'
-                    : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 opacity-75'
+                    : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50'
                   : `${preset.borderLight} ${preset.bgLight}`
               )}
             >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center',
-                        isLogged && isEaten
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                          : `${preset.accentColor} bg-white dark:bg-zinc-800 shadow-xs`
-                      )}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                        {preset.title}
-                      </h4>
-                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                        {preset.timeHint}
-                      </span>
-                    </div>
+              {/* Row 1: Session Icon + Name + Cost & Edit */}
+              <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div
+                    className={cn(
+                      'w-6 h-6 rounded-lg flex items-center justify-center shrink-0',
+                      isLogged && isEaten
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                        : `${preset.accentColor} bg-white dark:bg-zinc-800 shadow-2xs`
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
-
-                  {/* Status Indicator */}
-                  {isLogged && (
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold',
-                        isEaten
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                          : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                      )}
-                    >
-                      {isEaten ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                      {isEaten ? 'Eaten' : 'Skipped'}
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate block">
+                      {preset.title.split('/')[0].trim()}
                     </span>
-                  )}
+                  </div>
                 </div>
 
-                {/* Amount / Price display */}
-                <div className="mt-3 flex items-baseline justify-between">
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">Cost:</span>
+                {/* Price display / Editing */}
+                <div className="flex items-center gap-1 shrink-0">
                   {editingId === entry?.id ? (
                     <div className="flex items-center gap-1">
-                      <span className="text-xs text-zinc-400">₹</span>
+                      <span className="text-[11px] text-zinc-400">₹</span>
                       <input
                         type="number"
                         value={editAmountVal}
                         onChange={(e) => setEditAmountVal(e.target.value)}
-                        className="w-16 px-1.5 py-0.5 rounded border border-emerald-500 text-xs font-bold text-zinc-900 dark:text-zinc-100"
+                        className="w-12 px-1 py-0.5 rounded border border-emerald-500 text-xs font-bold bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                         autoFocus
                       />
                       <button
                         onClick={() => handleSaveEditAmount(entry!.id)}
-                        className="p-1 text-emerald-600 hover:bg-emerald-100 rounded"
+                        className="p-0.5 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950 rounded cursor-pointer"
                       >
-                        <Check className="w-3.5 h-3.5" />
+                        <Check className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="p-1 text-zinc-400 hover:bg-zinc-100 rounded"
+                        className="p-0.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded cursor-pointer"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <span
                         className={cn(
-                          'text-base font-bold',
+                          'text-xs font-extrabold',
                           isLogged && isSkipped
                             ? 'line-through text-zinc-400'
                             : 'text-zinc-900 dark:text-zinc-100'
@@ -288,10 +231,10 @@ export function QuickMealLogger({
                             setEditingId(entry!.id);
                             setEditAmountVal(String(entry!.amount));
                           }}
-                          className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
-                          title="Edit amount"
+                          className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                          title="Edit price"
                         >
-                          <Edit2 className="w-3 h-3" />
+                          <Edit2 className="w-2.5 h-2.5" />
                         </button>
                       )}
                     </div>
@@ -299,47 +242,59 @@ export function QuickMealLogger({
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-2">
+              {/* Row 2: One-tap Action Buttons */}
+              <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80">
                 {!isLogged ? (
                   <>
                     <button
                       type="button"
                       disabled={loadingType === preset.type}
                       onClick={() => handleQuickLog(preset, preset.defaultPrice)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                      className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-semibold transition-all cursor-pointer shadow-2xs"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Log Eaten</span>
+                      <Check className="w-3 h-3" />
+                      <span>Log ₹{preset.defaultPrice}</span>
                     </button>
                     <button
                       type="button"
                       disabled={loadingType === `skip-${preset.type}`}
                       onClick={() => handleQuickSkip(preset)}
-                      className="py-1.5 px-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 text-zinc-600 dark:text-zinc-300 text-xs font-medium transition-all cursor-pointer"
+                      className="py-1 px-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 text-zinc-600 dark:text-zinc-400 text-[11px] font-medium transition-all cursor-pointer"
                     >
                       Skip
                     </button>
                   </>
                 ) : (
-                  <div className="w-full flex items-center justify-between text-xs">
-                    <button
-                      onClick={() =>
-                        onUpdateMeal(entry!.id, {
-                          status: isEaten ? 'skipped' : 'eaten',
-                          amount: isEaten ? 0 : preset.defaultPrice,
-                        })
-                      }
-                      className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 font-medium underline underline-offset-2 cursor-pointer"
-                    >
-                      {isEaten ? 'Change to Skipped' : 'Change to Eaten'}
-                    </button>
+                  <div className="w-full flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          'text-[10px] font-bold px-1.5 py-0.2 rounded',
+                          isEaten
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-zinc-200/80 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                        )}
+                      >
+                        {isEaten ? '✓ Eaten' : '✕ Skipped'}
+                      </span>
+                      <button
+                        onClick={() =>
+                          onUpdateMeal(entry!.id, {
+                            status: isEaten ? 'skipped' : 'eaten',
+                            amount: isEaten ? 0 : preset.defaultPrice,
+                          })
+                        }
+                        className="text-[10px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 underline cursor-pointer"
+                      >
+                        {isEaten ? 'Skip' : 'Eat'}
+                      </button>
+                    </div>
                     <button
                       onClick={() => onDeleteMeal(entry!.id)}
-                      className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
+                      className="p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
                       title="Delete entry"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 )}
@@ -381,58 +336,6 @@ export function QuickMealLogger({
         </div>
       )}
 
-      {/* Add Custom / Extra Snack button & form */}
-      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
-        {!isAddingCustom ? (
-          <button
-            type="button"
-            onClick={() => setIsAddingCustom(true)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Extra Food / Snack Item</span>
-          </button>
-        ) : (
-          <form
-            onSubmit={handleSaveCustom}
-            className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex flex-wrap items-center gap-2"
-          >
-            <input
-              type="text"
-              placeholder="Item name (e.g. Special Sweet, Milk, Extra Rice)"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              required
-            />
-            <div className="relative w-24">
-              <span className="absolute left-2 top-1.5 text-xs text-zinc-400">₹</span>
-              <input
-                type="number"
-                placeholder="Amount"
-                value={customAmount}
-                onChange={(e) => setCustomAmount(e.target.value)}
-                className="w-full pl-5 pr-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loadingType === 'custom'}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold cursor-pointer"
-            >
-              Add Extra
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAddingCustom(false)}
-              className="px-2 py-1.5 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
-            >
-              Cancel
-            </button>
-          </form>
-        )}
-      </div>
     </div>
   );
 }

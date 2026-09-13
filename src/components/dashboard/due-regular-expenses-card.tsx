@@ -202,7 +202,7 @@ export function DueRegularExpensesCard({
   };
 
   return (
-    <div className="rounded-2xl bg-linear-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 dark:border-amber-500/15 p-3 sm:p-3.5 shadow-2xs relative overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+    <div className="rounded-2xl bg-linear-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 dark:border-amber-500/15 p-3 sm:p-3.5 shadow-2xs relative overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 w-full max-w-full min-w-0">
       {/* Background ambient decoration */}
       <div className="absolute -right-8 -top-8 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
 
@@ -335,7 +335,7 @@ export function DueRegularExpensesCard({
       </div>
 
       {/* Compact Action Footer: 1 Clean Row */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/15 dark:border-amber-500/10 relative z-10">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-2 border-t border-amber-500/15 dark:border-amber-500/10 relative z-10 w-full min-w-0">
         {/* Payment Method Selector */}
         <div className="flex items-center gap-1 select-none">
           {(['UPI', 'Cash'] as PaymentMethod[]).map((method) => (

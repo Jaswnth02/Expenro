@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowUpRight, Wallet, AlertTriangle } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Wallet, AlertTriangle, Pencil } from 'lucide-react';
 import { FinancialSummary, Expense, Category } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { useExcludedCategories, isExpenseExcluded } from '@/lib/exclusions';
@@ -63,14 +63,14 @@ export function SummaryCards({
   const isDepleted = realAvailableBalance <= 0;
 
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 w-full min-w-0">
       {/* Card 1: Total Expenses (Resets to 0 on 1st of every month) */}
       <div
         id="card-total-expenses"
-        className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between"
+        className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between min-w-0 overflow-hidden"
       >
-        <div className="flex items-center justify-between mb-1 gap-1">
-          <span className="text-[11px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
+        <div className="flex items-center justify-between mb-1 gap-1 min-w-0">
+          <span className="text-[11px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate min-w-0">
             Total Expenses
           </span>
           <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
@@ -78,7 +78,7 @@ export function SummaryCards({
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <div className="text-lg sm:text-2xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
             {formatCurrency(displayedTotalExpenses)}
           </div>
@@ -101,7 +101,18 @@ export function SummaryCards({
       {/* Card 2: Remaining Balance (Running Wallet Balance) */}
       <div
         id="card-available-balance"
-        className={`p-3 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between ${
+        onClick={onOpenSetBalance}
+        role={onOpenSetBalance ? 'button' : undefined}
+        tabIndex={onOpenSetBalance ? 0 : undefined}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && onOpenSetBalance) {
+            e.preventDefault();
+            onOpenSetBalance();
+          }
+        }}
+        className={`p-3 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col justify-between min-w-0 overflow-hidden ${
+          onOpenSetBalance ? 'cursor-pointer active:scale-[0.99] group' : ''
+        } ${
           isLowBalance
             ? 'border-amber-400/80 dark:border-amber-500/50 ring-1 ring-amber-500/20 bg-amber-50/10'
             : 'border-zinc-200/80 dark:border-zinc-800'
@@ -113,18 +124,14 @@ export function SummaryCards({
               Remaining Balance
             </span>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {isDepleted ? (
-              <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
-                Deficit
-              </span>
-            ) : isLowBalance ? (
-              <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 animate-pulse">
-                Low
-              </span>
-            ) : (
-              <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
-                Healthy
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenSetBalance && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-500/10 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold text-[9px] sm:text-[10px] border border-teal-500/25 group-hover:bg-teal-500/20 transition-colors"
+                title="Click to set custom balance"
+              >
+                <span>Edit</span>
+                <Pencil className="w-2.5 h-2.5" />
               </span>
             )}
             <div
@@ -172,16 +179,14 @@ export function SummaryCards({
               )}
             </span>
             {onOpenSetBalance ? (
-              <button
-                type="button"
-                onClick={onOpenSetBalance}
-                className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:underline shrink-0 cursor-pointer ml-1"
-              >
-                Set &rarr;
-              </button>
+              <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:underline shrink-0 ml-1 inline-flex items-center gap-0.5">
+                <span>Set Balance</span>
+                <ArrowUpRight className="w-2.5 h-2.5" />
+              </span>
             ) : isLowBalance ? (
               <Link
                 href="/income"
+                onClick={(e) => e.stopPropagation()}
                 className="text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:underline shrink-0 ml-1"
               >
                 + Top-up &rarr;
